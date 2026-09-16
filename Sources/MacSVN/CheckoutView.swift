@@ -7,6 +7,7 @@ struct CheckoutView: View {
     @StateObject private var browser = RepositoryBrowserModel()
     @Environment(\.dismiss) private var dismiss
     @ViewState private var destination: URL?
+    @ViewState private var showLogin = false
 
     private var checkoutUnavailableReason: String? {
         if model.isBusy {
@@ -43,8 +44,36 @@ struct CheckoutView: View {
                         .textFieldStyle(.roundedBorder)
                         .onSubmit { withClient { browser.browse(using: $0) } }
                         .disabled(browser.isLoading)
+                    Menu {
+                        ForEach(model.recentRepositoryURLs, id: \.self) { address in
+                            Button(address) {
+                                browser.address = address
+                                browser.addressChanged()
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "chevron.down")
+                    }
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
+                    .frame(width: 24)
+                    .help("选择最近使用的仓库地址")
+                    .accessibilityLabel("仓库地址历史")
+                    .disabled(model.recentRepositoryURLs.isEmpty || browser.isLoading)
                     Button("浏览仓库") { withClient { browser.browse(using: $0) } }
                         .disabled(browser.checkoutURL.isEmpty || browser.isLoading)
+                }
+                HStack {
+                    if let account = model.authenticationStore.authentication(for: browser.checkoutURL) {
+                        Label("已登录：\(account.username)", systemImage: "person.crop.circle.badge.checkmark")
+                            .font(.caption).foregroundStyle(.secondary)
+                    } else {
+                        Text("私有仓库可先登录，再浏览或检出。")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button("仓库账号…") { showLogin = true }
+                        .disabled(browser.checkoutURL.isEmpty || browser.isLoading || model.isBusy)
                 }
                 repositoryList
             }
@@ -61,7 +90,7 @@ struct CheckoutView: View {
                     Text(reason).font(.caption).foregroundStyle(.secondary)
                 }
             }
-            Text("直接检出到所选的空文件夹，递归包含全部子目录和文件，不包含 externals（外部引用）。\n私有仓库复用本机 SVN 已缓存的认证。")
+            Text("直接检出到所选的空文件夹，递归包含全部子目录和文件，不包含 externals（外部引用）。\n未在 App 登录时，使用本机 SVN 已缓存的认证。")
                 .font(.caption).foregroundStyle(.secondary)
             Divider()
             HStack {
@@ -79,8 +108,23 @@ struct CheckoutView: View {
         }
         .padding(28)
         .frame(width: 660)
+        .sheet(isPresented: $showLogin) {
+            RepositoryLoginView(model: model, repository: browser.checkoutURL) {
+                withClient { browser.browse(using: $0) }
+            }
+        }
         .onChange(of: browser.address) { _, _ in
             browser.addressChanged()
+        }
+        .onChange(of: browser.location) { _, location in
+            if let location {
+                model.rememberRepository(location.url)
+            }
+        }
+        .onAppear {
+            if browser.address.isEmpty {
+                browser.address = model.recentRepositoryURLs.first ?? ""
+            }
         }
         .onDisappear { browser.cancel() }
     }
@@ -143,7 +187,7 @@ struct CheckoutView: View {
     }
 
     private func withClient(_ action: (SVNClient) -> Void) {
-        do { action(try model.client()) }
+        do { action(try model.client(for: browser.checkoutURL)) }
         catch { browser.report(error) }
     }
 

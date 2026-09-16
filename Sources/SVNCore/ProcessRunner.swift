@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 
 public struct CommandOutput: Sendable {
     public let stdout: String
@@ -8,9 +9,25 @@ public struct CommandOutput: Sendable {
 
 public struct SVNError: LocalizedError, Sendable {
     public let message: String
+    public let diagnostic: String
+    public let requiresAuthentication: Bool
 
     public init(_ message: String) {
         self.message = message
+        self.diagnostic = message
+        self.requiresAuthentication = false
+    }
+
+    /// 展示可操作的认证提示；XML 半成品仅保留在诊断输出中，不混入用户错误正文。
+    public init(output: CommandOutput, xmlOutput: Bool) {
+        diagnostic = "SVN 退出码 \(output.exitCode)\n\(output.stderr)\(output.stdout)"
+        requiresAuthentication = output.stderr.contains("E170001:") || output.stderr.contains("E215004:")
+        let detail = xmlOutput ? output.stderr : output.stderr + output.stdout
+        let reason = detail.trimmingCharacters(in: .whitespacesAndNewlines)
+        let summary = requiresAuthentication
+            ? "仓库需要有效账号，或当前账号没有访问权限。请登录仓库后重试；密码仅保留在当前 App 会话中。"
+            : "SVN 退出码 \(output.exitCode)"
+        message = reason.isEmpty ? summary : "\(summary)\n\n\(reason)"
     }
 
     public var errorDescription: String? { message }
@@ -35,6 +52,7 @@ private final class ProcessExecution: @unchecked Sendable {
         executable: URL,
         arguments: [String],
         directory: URL?,
+        standardInput: Data?,
         onOutput: (@Sendable (String) -> Void)?
     ) throws -> CommandOutput {
         let stdout = Pipe()
@@ -42,7 +60,18 @@ private final class ProcessExecution: @unchecked Sendable {
         process.executableURL = executable
         process.arguments = arguments
         process.currentDirectoryURL = directory
-        process.standardInput = FileHandle.nullDevice
+        // GUI 启动时可能没有 UTF-8 locale，需与下方的 UTF-8 输出解码保持一致。
+        var environment = ProcessInfo.processInfo.environment
+        environment["LC_ALL"] = "en_US.UTF-8"
+        process.environment = environment
+        let input = standardInput == nil ? nil : Pipe()
+        process.standardInput = input?.fileHandleForReading ?? FileHandle.nullDevice
+        if let input {
+            // 取消或启动参数错误时子进程可能提前关闭输入，避免 SIGPIPE 终止 App。
+            guard fcntl(input.fileHandleForWriting.fileDescriptor, F_SETNOSIGPIPE, 1) != -1 else {
+                throw SVNError("无法配置子进程输入管道。")
+            }
+        }
         process.standardOutput = stdout
         process.standardError = stderr
 
@@ -58,10 +87,26 @@ private final class ProcessExecution: @unchecked Sendable {
             throw error
         }
         lock.unlock()
+        input?.fileHandleForReading.closeFile()
 
         // Drain both pipes concurrently: SVN can fill stderr while stdout is being read.
         let errorData = DataBox()
+        let inputError = InputErrorBox()
         let group = DispatchGroup()
+        if let input, let standardInput {
+            group.enter()
+            DispatchQueue.global(qos: .userInitiated).async {
+                defer {
+                    input.fileHandleForWriting.closeFile()
+                    group.leave()
+                }
+                do {
+                    try input.fileHandleForWriting.write(contentsOf: standardInput)
+                } catch {
+                    inputError.set(error)
+                }
+            }
+        }
         group.enter()
         DispatchQueue.global(qos: .userInitiated).async {
             errorData.set(Self.readOutput(stderr.fileHandleForReading, onOutput: onOutput))
@@ -76,6 +121,10 @@ private final class ProcessExecution: @unchecked Sendable {
         lock.unlock()
         if wasCancelled {
             throw CancellationError()
+        }
+        // 子进程失败时保留它的原始错误；成功退出却未传入完整输入则明确报错。
+        if process.terminationStatus == 0, let error = inputError.get() {
+            throw SVNError("向子进程传递输入失败：\(error.localizedDescription)")
         }
         return CommandOutput(
             stdout: String(decoding: outputData, as: UTF8.self),
@@ -113,6 +162,23 @@ private final class ProcessExecution: @unchecked Sendable {
     }
 }
 
+private final class InputErrorBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var error: Error?
+
+    func set(_ value: Error) {
+        lock.lock()
+        defer { lock.unlock() }
+        error = value
+    }
+
+    func get() -> Error? {
+        lock.lock()
+        defer { lock.unlock() }
+        return error
+    }
+}
+
 private final class DataBox: @unchecked Sendable {
     private let lock = NSLock()
     private var data = Data()
@@ -136,6 +202,7 @@ public enum ProcessRunner {
         executable: URL,
         arguments: [String],
         directory: URL? = nil,
+        standardInput: Data? = nil,
         onOutput: (@Sendable (String) -> Void)? = nil
     ) async throws -> CommandOutput {
         let execution = ProcessExecution()
@@ -147,6 +214,7 @@ public enum ProcessRunner {
                             executable: executable,
                             arguments: arguments,
                             directory: directory,
+                            standardInput: standardInput,
                             onOutput: onOutput
                         ))
                     } catch {

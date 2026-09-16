@@ -10,6 +10,13 @@ struct CheckoutProgress {
     var isOpeningWorkingCopy = false
 }
 
+enum HistoryState {
+    case idle
+    case loading
+    case loaded
+    case failed(message: String, requiresAuthentication: Bool)
+}
+
 @MainActor
 final class AppModel: ObservableObject {
     @Published var workingCopy: WorkingCopy?
@@ -18,19 +25,25 @@ final class AppModel: ObservableObject {
     @Published var focusedPath: String?
     @Published var diffText = "选择一个文件查看差异"
     @Published var logs: [LogEntry] = []
+    @Published var selectedHistoryRevision: String?
+    @Published private(set) var historyState: HistoryState = .idle
     @Published var message = ""
     @Published var operation = ""
     @Published var result = "欢迎使用 Mac SVN"
     @Published var errorMessage: String?
     @Published var recentPaths: [String] = UserDefaults.standard.stringArray(forKey: "workingCopies") ?? []
+    @Published private(set) var recentRepositoryURLs: [String] =
+        UserDefaults.standard.stringArray(forKey: "recentRepositoryURLs") ?? []
     @Published var executablePath: String = UserDefaults.standard.string(forKey: "svnExecutable")
         ?? SVNClient.discoverExecutable()?.path ?? ""
     @Published var showHistory = false
     @Published private(set) var checkoutProgress: CheckoutProgress?
+    @Published private(set) var authenticationStore = SVNAuthenticationStore()
+    @Published private(set) var isAuthenticating = false
     private var operationTask: Task<Void, Never>?
     private var diffTask: Task<Void, Never>?
 
-    var isBusy: Bool { !operation.isEmpty }
+    var isBusy: Bool { !operation.isEmpty || isAuthenticating }
     var selectedEntries: [StatusEntry] { entries.filter { selectedPaths.contains($0.path) } }
     var canCommit: Bool {
         !isBusy && !selectedEntries.isEmpty && selectedEntries.allSatisfy(\.canCommit)
@@ -40,11 +53,34 @@ final class AppModel: ObservableObject {
         !isBusy && !selectedEntries.isEmpty && selectedEntries.allSatisfy { $0.item == "unversioned" }
     }
 
-    func client() throws -> SVNClient {
+    func client(for repository: String? = nil) throws -> SVNClient {
         guard FileManager.default.isExecutableFile(atPath: executablePath) else {
             throw SVNError("未找到 SVN。请先运行 brew install subversion，并在设置中指定 svn 可执行文件。")
         }
-        return SVNClient(executable: URL(fileURLWithPath: executablePath))
+        let authentication = (repository ?? workingCopy?.repositoryURL).flatMap {
+            authenticationStore.authentication(for: $0)
+        }
+        return SVNClient(executable: URL(fileURLWithPath: executablePath), authentication: authentication)
+    }
+
+    /// 登录仅做远端读取验证，成功后按仓库根路径保存会话，不自动重试写操作。
+    func authenticate(repository: String, username: String, password: String) async throws {
+        guard !isBusy else {
+            throw SVNError("请等待当前操作完成。")
+        }
+        guard let scheme = URLComponents(string: repository)?.scheme?.lowercased(),
+              ["http", "https", "svn"].contains(scheme) else {
+            throw SVNError("账号密码登录支持 http://、https:// 和 svn:// 地址。file:// 不需要登录，svn+ssh:// 使用系统 SSH 认证。")
+        }
+        let authentication = try SVNAuthentication(username: username, password: password)
+        let executable = try client(for: repository).executable
+        isAuthenticating = true
+        defer { isAuthenticating = false }
+        let client = SVNClient(executable: executable, authentication: authentication)
+        let location = try await client.repositoryLocation(repository)
+        try Task.checkCancellation()
+        authenticationStore.set(authentication, for: location.rootURL)
+        rememberRepository(location.url)
     }
 
     func chooseWorkingCopy() {
@@ -70,10 +106,11 @@ final class AppModel: ObservableObject {
             self.selectedPaths = []
             self.focusedPath = nil
             self.diffText = "选择一个文件查看差异"
-            self.logs = []
+            self.resetHistory()
             self.message = ""
             self.showHistory = false
             self.remember(copy.root)
+            self.rememberRepository(copy.repositoryURL)
             self.result = "已打开 \(copy.root.lastPathComponent)，\(entries.count) 项状态记录"
         }
     }
@@ -123,7 +160,7 @@ final class AppModel: ObservableObject {
 
     func checkout(repository: String, destination: URL) {
         perform("检出仓库") {
-            let client = try self.client()
+            let client = try self.client(for: repository)
             self.checkoutProgress = CheckoutProgress()
             self.result = "正在连接仓库，检出到：\(destination.path)\n"
             // 先消费完输出再发布完成/失败，避免后台回调覆盖终态或下一次操作。
@@ -157,17 +194,18 @@ final class AppModel: ObservableObject {
             self.selectedPaths = []
             self.focusedPath = nil
             self.diffText = "选择一个文件查看差异"
-            self.logs = []
+            self.resetHistory()
             self.message = ""
             self.showHistory = false
             self.remember(copy.root)
-            self.result = "检出完成，已打开：\(destination.path)\n\n\(output)"
+            self.rememberRepository(copy.repositoryURL)
+            self.result = "检出完成，已打开：\(destination.path)\n\n\(self.formatCheckoutOutput(output))"
         }
     }
 
     /// SVN 的 A 通知表示文件或目录已完成检出，不将它误当作正在传输的文件或百分比。
     private func receiveCheckoutOutput(_ text: String) {
-        result += text
+        result += formatCheckoutOutput(text)
         checkoutProgress?.lastOutputAt = Date()
         for line in text.split(separator: "\n") where line.hasPrefix("A    ") {
             checkoutProgress?.completedItemCount += 1
@@ -175,13 +213,42 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// 将检出的新增通知显示为中文，保留其他输出和换行，避免改写错误信息。
+    private func formatCheckoutOutput(_ text: String) -> String {
+        text.components(separatedBy: "\n").map { line in
+            guard line.hasPrefix("A    ") else {
+                return line
+            }
+            return "已检出：\(line.dropFirst(5))"
+        }.joined(separator: "\n")
+    }
+
+    /// 历史失败与空历史分开呈现；认证后只重试这一只读请求，不重放任何写操作。
     func loadHistory() {
-        guard let copy = workingCopy else { return }
+        guard !isBusy, let copy = workingCopy else { return }
         showHistory = true
-        perform("读取最近 50 条历史") {
+        resetHistory()
+        historyState = .loading
+        perform("读取最近 50 条历史", reportFailure: { error in
+            let svnError = error as? SVNError
+            let message = error is CancellationError ? "历史读取已取消，可重新加载。" : error.localizedDescription
+            self.historyState = .failed(
+                message: message,
+                requiresAuthentication: svnError?.requiresAuthentication == true
+            )
+            self.result = svnError?.diagnostic ?? message
+        }) {
             self.logs = try await self.client().history(at: copy.root)
+            self.selectedHistoryRevision = self.logs.first?.revision
+            self.historyState = .loaded
             self.result = "已读取 \(self.logs.count) 条历史记录"
         }
+    }
+
+    private func resetHistory() {
+        logs = []
+        selectedHistoryRevision = nil
+        historyState = .idle
     }
 
     /// Cancel the previous request and check identity so old diff results never overwrite new selections.
@@ -192,8 +259,12 @@ final class AppModel: ObservableObject {
             diffText = "选择一个文件查看差异"
             return
         }
-        if ["unversioned", "external", "missing", "obstructed", "incomplete"].contains(entry.item) {
-            diffText = "\(entry.label)：\(path)\n\n未跟踪文件请先添加，再查看 SVN 差异。缺失或冲突项目请先检查工作副本。"
+        if entry.item == "unversioned" {
+            diffText = "此项目存在于本地，但尚未纳入 SVN 版本控制，没有可比较的仓库基准版本。\n\n需要提交时，先勾选并点击“添加到 SVN”；添加只安排版本控制，提交后才会上传。添加目录不会自动添加子文件。\n\n不需要提交的本地文件可以保留原状。"
+            return
+        }
+        if ["external", "missing", "obstructed", "incomplete"].contains(entry.item) {
+            diffText = "\(entry.label)：\(path)\n\n当前状态无法展示文本差异，请先检查工作副本；外部工作副本需单独打开。"
             return
         }
         diffText = "正在读取差异…"
@@ -238,15 +309,27 @@ final class AppModel: ObservableObject {
         selectedPaths = []
         focusedPath = nil
         diffText = "选择一个文件查看差异"
-        logs = []
+        resetHistory()
         message = ""
         showHistory = false
         errorMessage = nil
         result = "欢迎使用 Mac SVN"
     }
 
+    /// 记录成功访问的仓库地址，最近使用的排在前面；与登录密码分开持久化。
+    func rememberRepository(_ repository: String) {
+        guard let url = URLComponents(string: repository), url.password == nil else {
+            return
+        }
+        recentRepositoryURLs = [repository] + recentRepositoryURLs.filter { $0 != repository }
+        recentRepositoryURLs = Array(recentRepositoryURLs.prefix(12))
+        UserDefaults.standard.set(recentRepositoryURLs, forKey: "recentRepositoryURLs")
+    }
+
+    /// 已有副本保持位置，避免侧栏点击后换位；仅新副本加入顶部。
     private func remember(_ root: URL) {
-        recentPaths = [root.path] + recentPaths.filter { $0 != root.path }
+        guard !recentPaths.contains(root.path) else { return }
+        recentPaths.insert(root.path, at: 0)
         recentPaths = Array(recentPaths.prefix(12))
         UserDefaults.standard.set(recentPaths, forKey: "workingCopies")
     }
@@ -259,7 +342,7 @@ final class AppModel: ObservableObject {
         entries = newEntries
         workingCopy = newInfo
         selectedPaths.formIntersection(Set(entries.map(\.path)))
-        logs = []
+        resetHistory()
         loadDiff()
     }
 
@@ -267,6 +350,7 @@ final class AppModel: ObservableObject {
     private func perform(
         _ title: String,
         refreshAfterFailure: Bool = false,
+        reportFailure: ((Error) -> Void)? = nil,
         action: @escaping @MainActor () async throws -> Void
     ) {
         guard !isBusy else { return }
@@ -281,6 +365,10 @@ final class AppModel: ObservableObject {
             do {
                 try await action()
             } catch {
+                if let reportFailure {
+                    reportFailure(error)
+                    return
+                }
                 var detail = error is CancellationError
                     ? "操作已中断；已产生的本地变更不会自动撤销。请刷新状态后检查。"
                     : error.localizedDescription

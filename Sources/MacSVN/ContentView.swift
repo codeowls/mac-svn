@@ -6,8 +6,13 @@ struct ContentView: View {
     @ObservedObject var model: AppModel
     @ViewState private var showCheckout = false
     @ViewState private var showCommit = false
+    @ViewState private var showLogin = false
+    @ViewState private var showDiff = false
     @ViewState private var filter = ""
     @ViewState private var showOutput = false
+    @ViewState private var footerHeight: CGFloat = 44
+
+    private let statusRowHeight: CGFloat = 44
 
     private var visibleEntries: [StatusEntry] {
         model.entries.filter { filter.isEmpty || $0.path.localizedCaseInsensitiveContains(filter) }
@@ -23,7 +28,7 @@ struct ContentView: View {
                     workspaceHeader(copy)
                     Divider()
                     if model.showHistory {
-                        historyView
+                        HistoryView(model: model, onLogin: { showLogin = true })
                     } else {
                         changesView
                     }
@@ -32,6 +37,16 @@ struct ContentView: View {
                 }
                 Divider()
                 operationFooter
+                    .background {
+                        GeometryReader { geometry in
+                            // 在详情列内读取实际高度，避免尺寸偏好被原生分栏边界截断。
+                            Color.clear
+                                .onAppear { footerHeight = geometry.size.height }
+                                .onChange(of: geometry.size.height) { _, height in
+                                    footerHeight = height
+                                }
+                        }
+                    }
             }
         }
         .toolbar {
@@ -39,24 +54,43 @@ struct ContentView: View {
                 Button { model.chooseWorkingCopy() } label: {
                     Label("打开", systemImage: "folder")
                 }
+                .help("打开本机已有的 SVN 工作副本")
                 .disabled(model.isBusy)
                 Button { showCheckout = true } label: {
                     Label("检出远端", systemImage: "square.and.arrow.down")
                 }
+                .help("从远端仓库检出文件到本机")
                 .disabled(model.isBusy)
                 Button { model.refresh() } label: {
                     Label("刷新", systemImage: "arrow.clockwise")
                 }
+                .help("重新读取本地文件状态，不从服务器下载更新")
+                .disabled(model.isBusy || model.workingCopy == nil)
+                Button { showLogin = true } label: {
+                    Label("仓库账号", systemImage: "person.crop.circle")
+                }
+                .help("登录或切换当前仓库的 SVN 账号")
                 .disabled(model.isBusy || model.workingCopy == nil)
                 Button { model.update() } label: {
                     Label("更新", systemImage: "arrow.down.circle")
                 }
+                .help("从服务器获取最新版本并更新当前工作副本")
                 .disabled(model.isBusy || model.workingCopy == nil)
             }
         }
         .toolbarBackground(.hidden, for: .windowToolbar)
         .sheet(isPresented: $showCheckout) { CheckoutView(model: model) }
         .sheet(isPresented: $showCommit) { commitReview }
+        .sheet(isPresented: $showDiff, onDismiss: { model.focusedPath = nil }) {
+            DiffView(model: model)
+        }
+        .sheet(isPresented: $showLogin) {
+            if let copy = model.workingCopy {
+                RepositoryLoginView(model: model, repository: copy.repositoryURL) {
+                    if model.showHistory { model.loadHistory() }
+                }
+            }
+        }
         .alert("操作未完成", isPresented: Binding(
             get: { model.errorMessage != nil },
             set: { if !$0 { model.errorMessage = nil } }
@@ -140,11 +174,22 @@ struct ContentView: View {
                 }
             }
             Spacer(minLength: 0)
-            Divider()
-            SettingsLink { Label("设置", systemImage: "gearshape") }
-                .buttonStyle(.plain).padding(.horizontal, 10)
         }
-        .padding(.horizontal, 14).padding(.bottom, 20)
+        .padding(.horizontal, 14)
+        .frame(maxHeight: .infinity, alignment: .top)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            VStack(spacing: 0) {
+                Divider()
+                HStack {
+                    SettingsLink { Label("设置", systemImage: "gearshape") }
+                        .buttonStyle(.plain)
+                    Spacer()
+                }
+                .padding(.horizontal, 24)
+                .frame(height: statusRowHeight)
+                .frame(height: footerHeight, alignment: .top)
+            }
+        }
     }
 
     private func workspaceHeader(_ copy: WorkingCopy) -> some View {
@@ -157,6 +202,16 @@ struct ContentView: View {
                         .textSelection(.enabled).lineLimit(1).truncationMode(.middle)
                 }
                 Spacer()
+                Button { showLogin = true } label: {
+                    Label(
+                        model.authenticationStore.authentication(for: copy.repositoryURL)
+                            .map { "账号：\($0.username)" } ?? "未在 App 登录",
+                        systemImage: "person.crop.circle"
+                    )
+                    .font(.caption)
+                }
+                .disabled(model.isBusy)
+                .help("账号按仓库地址隔离；未在 App 登录时使用本机 SVN 已有的认证配置。密码仅保留在当前 App 会话。")
                 Text("r\(copy.revision)").font(.system(.caption, design: .monospaced))
                     .padding(.horizontal, 10).padding(.vertical, 6)
                     .background(.quaternary, in: Capsule())
@@ -193,114 +248,84 @@ struct ContentView: View {
             fileComparisonView
             commitEditor
         }
+        .frame(maxHeight: .infinity, alignment: .top)
     }
 
     private var fileComparisonView: some View {
-        HSplitView {
-            VStack(spacing: 0) {
-                HStack {
-                    TextField("筛选文件路径", text: $filter)
-                        .textFieldStyle(.roundedBorder)
-                    Text("\(model.entries.count) 项").font(.caption).foregroundStyle(.secondary)
-                }
-                .padding(12)
-                if model.entries.isEmpty {
-                    ContentUnavailableView("工作副本干净", systemImage: "checkmark.circle", description: Text("当前没有本地变更"))
-                } else {
-                    ScrollView {
-                        LazyVStack(spacing: 3) {
-                            ForEach(visibleEntries) { entry in
-                                HStack(spacing: 10) {
-                                    Toggle("选择 \(entry.path)", isOn: Binding(
-                                        get: { model.selectedPaths.contains(entry.path) },
-                                        set: { selected in
-                                            if selected { model.selectedPaths.insert(entry.path) }
-                                            else { model.selectedPaths.remove(entry.path) }
-                                        }
-                                    ))
-                                    .labelsHidden().toggleStyle(.checkbox)
-                                    .disabled(model.isBusy || (!entry.canCommit && entry.item != "unversioned"))
-                                    Button { model.focusedPath = entry.path } label: {
-                                        HStack {
-                                            VStack(alignment: .leading, spacing: 5) {
-                                                Text(entry.path).font(.system(size: 12, weight: .medium))
-                                                    .lineLimit(2).multilineTextAlignment(.leading)
-                                                Text(entry.label).font(.caption2).foregroundStyle(statusColor(entry))
-                                            }
-                                            Spacer(minLength: 0)
-                                            Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.tertiary)
-                                        }
-                                        .contentShape(Rectangle())
+        VStack(spacing: 0) {
+            HStack {
+                TextField("筛选文件路径", text: $filter)
+                    .textFieldStyle(.roundedBorder)
+                Text("\(visibleEntries.count) 项").font(.caption).foregroundStyle(.secondary)
+            }
+            .padding(12)
+            if model.entries.isEmpty {
+                ContentUnavailableView("工作副本干净", systemImage: "checkmark.circle", description: Text("当前没有本地变更"))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if visibleEntries.isEmpty {
+                ContentUnavailableView("没有匹配的文件", systemImage: "magnifyingglass", description: Text("试试其他路径关键词"))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 3) {
+                        ForEach(visibleEntries) { entry in
+                            HStack(spacing: 10) {
+                                Toggle("选择 \(entry.path)", isOn: Binding(
+                                    get: { model.selectedPaths.contains(entry.path) },
+                                    set: { selected in
+                                        if selected { model.selectedPaths.insert(entry.path) }
+                                        else { model.selectedPaths.remove(entry.path) }
                                     }
-                                    .buttonStyle(.plain).disabled(model.isBusy)
+                                ))
+                                .labelsHidden().toggleStyle(.checkbox)
+                                .disabled(model.isBusy || (!entry.canCommit && entry.item != "unversioned"))
+                                Button {
+                                    model.focusedPath = entry.path
+                                    showDiff = true
+                                } label: {
+                                    HStack {
+                                        VStack(alignment: .leading, spacing: 5) {
+                                            Text(entry.path).font(.system(size: 12, weight: .medium))
+                                                .lineLimit(2).multilineTextAlignment(.leading)
+                                            Text(entry.label).font(.caption2).foregroundStyle(statusColor(entry))
+                                                .help(entry.item == "unversioned"
+                                                    ? "仅存在于本地，尚未加入 SVN；点击查看说明"
+                                                    : "点击查看文件差异")
+                                        }
+                                        Spacer(minLength: 0)
+                                        Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.tertiary)
+                                    }
+                                    .contentShape(Rectangle())
                                 }
-                                .padding(11)
-                                .background(model.focusedPath == entry.path ? Color.primary.opacity(0.07) : .clear,
-                                            in: RoundedRectangle(cornerRadius: 9))
+                                .buttonStyle(.plain).disabled(model.isBusy)
                             }
-                        }
-                        .padding(8)
-                    }
-                    .frame(maxHeight: .infinity)
-                }
-                Divider()
-                HStack {
-                    Text("已选 \(model.selectedPaths.count) 项").font(.caption)
-                    Spacer()
-                    Button("取消选择") { model.selectedPaths = [] }
-                        .disabled(model.isBusy || model.selectedPaths.isEmpty)
-                    Button("添加到 SVN") { model.addSelected() }
-                        .disabled(!model.canAdd)
-                }
-                .padding(10)
-            }
-            .frame(minWidth: 320, idealWidth: 390)
-            VStack(alignment: .leading, spacing: 0) {
-                HStack {
-                    Label(model.focusedPath ?? "文件差异", systemImage: "doc.text")
-                        .font(.system(size: 12, weight: .medium)).lineLimit(1).truncationMode(.middle)
-                    Spacer()
-                    if let path = model.focusedPath, let copy = model.workingCopy {
-                        Button("在 Finder 中显示") {
-                            NSWorkspace.shared.activateFileViewerSelecting([copy.root.appendingPathComponent(path)])
+                            .padding(11)
+                            .background(model.focusedPath == entry.path ? Color.primary.opacity(0.07) : .clear,
+                                        in: RoundedRectangle(cornerRadius: 9))
                         }
                     }
+                    .padding(8)
                 }
-                .padding(12)
-                Divider()
-                ScrollView([.horizontal, .vertical]) {
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text(highlightedDiff)
-                            .font(.system(size: 12, design: .monospaced))
-                            .lineSpacing(5).textSelection(.enabled)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .topLeading).padding(18)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color(nsColor: .textBackgroundColor))
+                .frame(maxHeight: .infinity)
             }
-            .frame(minWidth: 340)
+            Divider()
+            HStack {
+                Text("已选 \(model.selectedPaths.count) 项").font(.caption)
+                Spacer()
+                Button("取消选择") { model.selectedPaths = [] }
+                    .disabled(model.isBusy || model.selectedPaths.isEmpty)
+                Button("添加到 SVN") { model.addSelected() }
+                    .disabled(!model.canAdd)
+            }
+            .padding(10)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
     private func statusColor(_ entry: StatusEntry) -> Color {
         if entry.isConflict || entry.item == "deleted" { return .red }
         if entry.item == "added" { return .green }
         return entry.item == "unversioned" ? .secondary : .orange
-    }
-
-    /// Keep SVN's original diff text selectable while distinguishing additions and removals.
-    private var highlightedDiff: AttributedString {
-        var result = AttributedString()
-        let lines = model.diffText.components(separatedBy: "\n")
-        for (index, line) in lines.enumerated() {
-            var part = AttributedString(line + (index < lines.count - 1 ? "\n" : ""))
-            if line.hasPrefix("+") { part.foregroundColor = .green }
-            else if line.hasPrefix("-") { part.foregroundColor = .red }
-            else if line.hasPrefix("@@") { part.foregroundColor = .secondary }
-            result.append(part)
-        }
-        return result
     }
 
     private var commitEditor: some View {
@@ -334,27 +359,6 @@ struct ContentView: View {
         .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 14))
         .overlay(RoundedRectangle(cornerRadius: 14).stroke(.separator.opacity(0.45)))
         .padding(16)
-    }
-
-    private var historyView: some View {
-        List(model.logs) { log in
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text("r\(log.revision)").font(.system(.headline, design: .monospaced))
-                    Text(log.author).font(.subheadline)
-                    Spacer()
-                    Text(log.date).font(.caption).foregroundStyle(.secondary)
-                }
-                Text(log.message.isEmpty ? "（无提交说明）" : log.message)
-                    .textSelection(.enabled)
-            }
-            .padding(10)
-        }
-        .overlay {
-            if model.logs.isEmpty && !model.isBusy {
-                ContentUnavailableView("暂无历史记录", systemImage: "clock")
-            }
-        }
     }
 
     private var welcomeView: some View {
@@ -400,7 +404,7 @@ struct ContentView: View {
     }
 
     private var operationFooter: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
                 if model.isBusy { ProgressView().controlSize(.small) }
                 else { Image(systemName: "terminal").foregroundStyle(.secondary) }
@@ -413,6 +417,7 @@ struct ContentView: View {
                 }
                 .buttonStyle(.plain).font(.caption).foregroundStyle(.secondary)
             }
+            .frame(height: statusRowHeight)
             if let progress = model.checkoutProgress {
                 TimelineView(.periodic(from: progress.startedAt, by: 1)) { context in
                     VStack(alignment: .leading, spacing: 5) {
@@ -439,6 +444,7 @@ struct ContentView: View {
                     }
                     .font(.caption)
                 }
+                .padding(.bottom, 12)
             }
             if showOutput {
                 ScrollViewReader { proxy in
@@ -454,9 +460,10 @@ struct ContentView: View {
                     }
                 }
                 .frame(height: 100)
+                .padding(.bottom, 12)
             }
         }
-        .padding(.horizontal, 18).padding(.vertical, 12)
+        .padding(.horizontal, 18)
     }
 
     private var commitReview: some View {

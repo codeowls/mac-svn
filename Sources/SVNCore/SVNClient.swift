@@ -2,9 +2,11 @@ import Foundation
 
 public struct SVNClient: Sendable {
     public let executable: URL
+    private let authentication: SVNAuthentication?
 
-    public init(executable: URL) {
+    public init(executable: URL, authentication: SVNAuthentication? = nil) {
         self.executable = executable
+        self.authentication = authentication
     }
 
     public static func discoverExecutable() -> URL? {
@@ -34,7 +36,9 @@ public struct SVNClient: Sendable {
 
     public func history(at directory: URL) async throws -> [LogEntry] {
         // HEAD avoids hiding recent commits when the working-copy root has a mixed revision.
-        let output = try await command(["log", "--xml", "--limit", "50", "-r", "HEAD:0", "--", ".@"], in: directory)
+        let output = try await command(
+            ["log", "--xml", "--verbose", "--limit", "50", "-r", "HEAD:0", "--", ".@"], in: directory
+        )
         return try SVNXML.log(output.stdout)
     }
 
@@ -162,14 +166,21 @@ public struct SVNClient: Sendable {
         in directory: URL? = nil,
         onOutput: (@Sendable (String) -> Void)? = nil
     ) async throws -> CommandOutput {
+        var options = ["--non-interactive"]
+        var input: Data?
+        if let authentication {
+            options += ["--no-auth-cache", "--username", authentication.username, "--password-from-stdin"]
+            input = Data((authentication.password + "\n").utf8)
+        }
         let output = try await ProcessRunner.run(
             executable: executable,
-            arguments: ["--non-interactive"] + arguments,
+            arguments: options + arguments,
             directory: directory,
+            standardInput: input,
             onOutput: onOutput
         )
         guard output.exitCode == 0 else {
-            throw SVNError("SVN 退出码 \(output.exitCode)\n\(output.stderr)\(output.stdout)")
+            throw SVNError(output: output, xmlOutput: arguments.contains("--xml"))
         }
         return output
     }

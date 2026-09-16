@@ -152,7 +152,24 @@ enum SVNXML {
                 revision: revision,
                 author: node.child("author")?.text ?? "（无作者）",
                 date: node.child("date")?.text ?? "",
-                message: node.child("msg")?.text ?? ""
+                message: node.child("msg")?.text ?? "",
+                changedPaths: try (node.child("paths")?.children ?? [])
+                    .filter { $0.name == "path" }
+                    .map { path in
+                        guard let action = path.attributes["action"], !path.text.isEmpty else {
+                            throw SVNError("SVN 历史变更项缺少路径或操作类型")
+                        }
+                        return LogChangedPath(
+                            path: path.text,
+                            action: action,
+                            kind: path.attributes["kind"],
+                            copyFromPath: path.attributes["copyfrom-path"],
+                            copyFromRevision: path.attributes["copyfrom-rev"],
+                            textModified: path.attributes["text-mods"].flatMap(Bool.init),
+                            propertiesModified: path.attributes["prop-mods"].flatMap(Bool.init)
+                        )
+                    }
+                    .sorted { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
             )
         }
     }

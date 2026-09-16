@@ -61,7 +61,7 @@ private struct SettingsView: View {
                 .disabled(model.isBusy)
             Text("未安装时，在终端运行：brew install subversion")
                 .font(.caption).foregroundStyle(.secondary)
-            Text("首版复用本机 SVN 缓存的凭据。请先在终端完成一次仓库认证；App 不保存密码，也不自动信任证书。")
+            Text("可在检出窗口或工具栏的“仓库账号”中登录。密码仅用于本次 App 会话；未登录时复用本机 SVN 缓存。App 不自动信任证书。")
                 .font(.callout)
             Button("保存设置") { model.saveSettings() }
                 .disabled(model.isBusy)

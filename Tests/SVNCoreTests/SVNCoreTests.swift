@@ -4,6 +4,70 @@ import Testing
 
 @Suite("SVN XML 与路径语义")
 struct XMLTests {
+    @Test func diffLineNumbersAndSplitAlignment() {
+        let diff = UnifiedDiff("""
+        --- sample.txt (revision 1)
+        +++ sample.txt (working copy)
+        @@ -3,3 +3,4 @@
+         context
+        -old
+        +new
+        +extra
+         end
+        @@ -20 +21 @@
+        -last
+        +final
+        \\ No newline at end of file
+        """)
+        #expect(diff.additions == 3)
+        #expect(diff.deletions == 2)
+        #expect(diff.hunkIDs == [2, 8])
+        #expect(diff.lines[3].oldNumber == 3)
+        #expect(diff.lines[5].newNumber == 4)
+        #expect(diff.lines[7].oldNumber == 5)
+        #expect(diff.lines[7].newNumber == 6)
+        #expect(diff.lines[10].newNumber == 21)
+        let replacement = diff.splitRows.first { $0.left?.text == "-old" }
+        #expect(replacement?.right?.text == "+new")
+        #expect(diff.splitRows.first { $0.right?.text == "+extra" }?.left == nil)
+    }
+
+    @Test func diffSeparatesPropertiesAndHeaderLikeContent() {
+        let diff = UnifiedDiff("""
+        --- sample
+        +++ sample
+        @@ -1 +1 @@
+        --- old content
+        +++ new content
+        Property changes on: sample
+        ___________________________________________________________________
+        Modified: svn:keywords
+        ## -1 +1 ##
+        -Id
+        +Date
+        """)
+        #expect(diff.additions == 1)
+        #expect(diff.deletions == 1)
+        #expect(diff.lines[3].oldNumber == 1)
+        #expect(diff.lines.last?.newNumber == nil)
+        #expect(diff.lines.last?.kind == .metadata)
+    }
+
+    @Test func diffHandlesEmptyRangesAndBinaryNotice() {
+        let added = UnifiedDiff("@@ -0,0 +1,2 @@\n+one\n+two\n")
+        #expect(added.additions == 2)
+        #expect(added.lines[1].oldNumber == nil)
+        #expect(added.lines[2].newNumber == 2)
+        let removed = UnifiedDiff("@@ -1,2 +0,0 @@\n-one\n-two\n")
+        #expect(removed.deletions == 2)
+        #expect(removed.lines[2].oldNumber == 2)
+        #expect(removed.lines[2].newNumber == nil)
+        let binary = UnifiedDiff("Cannot display: file marked as a binary type.\nsvn:mime-type = application/octet-stream\n")
+        #expect(binary.additions == 0)
+        #expect(binary.hunkIDs.isEmpty)
+        #expect(binary.lines.count == 2)
+    }
+
     @Test func propertiesAndConflicts() throws {
         let entries = try SVNXML.status("""
         <?xml version="1.0"?><status><target path=".">
@@ -31,6 +95,49 @@ struct XMLTests {
         第二行</msg></logentry></log>
         """)
         #expect(logs.first?.message == "第一行 & 标记\n第二行")
+        #expect(logs.first?.changedPaths.isEmpty == true)
+    }
+
+    @Test func historyChangedPathsPreserveActionsAndCopySource() throws {
+        let logs = try SVNXML.log("""
+        <log><logentry revision="12"><paths>
+          <path action="A" kind="file" copyfrom-path="/旧目录/a &amp; b.txt" copyfrom-rev="9" text-mods="true" prop-mods="false">/新目录/中文 @ 文件.txt</path>
+          <path action="M" kind="dir" text-mods="false" prop-mods="true">/属性目录</path>
+          <path action="D" kind="file">/已删除.txt</path>
+          <path action="R">/替换.txt</path>
+        </paths><msg>变更记录</msg></logentry></log>
+        """)
+        let paths = try #require(logs.first?.changedPaths)
+        #expect(paths.count == 4)
+        let copied = try #require(paths.first { $0.action == "A" })
+        #expect(copied.path == "/新目录/中文 @ 文件.txt")
+        #expect(copied.copyFromPath == "/旧目录/a & b.txt")
+        #expect(copied.copyFromRevision == "9")
+        #expect(copied.label == "新增 · 复制")
+        #expect(paths.first { $0.action == "M" }?.label == "属性修改")
+        #expect(paths.first { $0.action == "D" }?.label == "删除")
+        #expect(paths.first { $0.action == "R" }?.label == "替换")
+        #expect(paths.first { $0.action == "R" }?.textModified == nil)
+        #expect(throws: SVNError.self) {
+            try SVNXML.log("<log><logentry revision='1'><paths><path>/broken</path></paths></logentry></log>")
+        }
+    }
+
+    @Test func historyAuthenticationErrorKeepsDiagnosticsSeparate() {
+        let partialXML = "<?xml version=\"1.0\"?><log>"
+        let stderr = "svn: E170013: Unable to connect\nsvn: E170001: Can't get username or password\n"
+        let error = SVNError(output: CommandOutput(stdout: partialXML, stderr: stderr, exitCode: 1), xmlOutput: true)
+        #expect(error.requiresAuthentication)
+        #expect(error.message.contains("请登录仓库"))
+        #expect(!error.message.contains(partialXML))
+        #expect(error.diagnostic.contains(partialXML))
+        #expect(error.diagnostic.contains(stderr))
+        let connection = SVNError(
+            output: CommandOutput(stdout: partialXML, stderr: "svn: E170013: Unable to connect\nsvn: E000061: Connection refused", exitCode: 1),
+            xmlOutput: true
+        )
+        #expect(!connection.requiresAuthentication)
+        #expect(connection.message.contains("Connection refused"))
     }
 }
 
@@ -95,6 +202,10 @@ struct IntegrationTests {
         #expect(modifiedDiff.contains("+changed"))
         let history = try await f.client.history(at: f.first)
         #expect(history.contains { $0.message == "仅提交中文文件" })
+        let selectedCommit = try #require(history.first { $0.message == "仅提交中文文件" })
+        #expect(selectedCommit.changedPaths.count == 1)
+        #expect(selectedCommit.changedPaths.first?.path == "/" + special)
+        #expect(selectedCommit.changedPaths.first?.action == "A")
         _ = try await f.client.update(at: f.second)
         #expect(FileManager.default.fileExists(atPath: f.second.appendingPathComponent(special).path))
         #expect(FileManager.default.fileExists(atPath: f.second.appendingPathComponent("-option.txt").path))
@@ -120,6 +231,12 @@ struct IntegrationTests {
         _ = try await f.client.commit(paths: ["folder"], message: "仅目录属性", at: f.first)
         status = try await f.client.status(at: f.first)
         #expect(status.first { $0.path == "folder/child.txt" }?.item == "modified")
+        let history = try await f.client.history(at: f.first)
+        let propertyCommit = try #require(history.first { $0.message == "仅目录属性" })
+        #expect(propertyCommit.changedPaths.count == 1)
+        #expect(propertyCommit.changedPaths.first?.path == "/folder")
+        #expect(propertyCommit.changedPaths.first?.kind == "dir")
+        #expect(propertyCommit.changedPaths.first?.label == "属性修改")
     }
 
     @Test func updateConflictBlocksCommit() async throws {
@@ -150,6 +267,38 @@ struct IntegrationTests {
         await #expect(throws: (any Error).self) {
             try await f.client.checkout(repository: f.repository.absoluteString, destination: f.first)
         }
+    }
+
+    @Test func checkoutPreservesChinesePathsInStreamedAndFinalOutput() async throws {
+        let f = try await Fixture.create()
+        let filename = "设计文档.txt"
+        try f.write(filename, "repository content\n")
+        _ = try await f.client.add(paths: [filename], at: f.first)
+        _ = try await f.client.commit(paths: [filename], message: "中文文件", at: f.first)
+
+        let destination = f.root.appendingPathComponent("checkout")
+        let (stream, continuation) = AsyncStream<String>.makeStream()
+        let reader = Task {
+            var received = ""
+            for await text in stream {
+                received += text
+            }
+            return received
+        }
+        defer { continuation.finish() }
+        let output = try await f.client.checkout(
+            repository: f.repository.absoluteString,
+            destination: destination,
+            onOutput: { continuation.yield($0) }
+        )
+        continuation.finish()
+        let received = await reader.value
+        #expect(output.contains(filename))
+        #expect(received.contains(filename))
+        #expect(!output.contains("{U+"))
+        #expect(!received.contains("{U+"))
+        #expect(try String(contentsOf: destination.appendingPathComponent(filename), encoding: .utf8)
+            == "repository content\n")
     }
 
     @Test func checkoutIntoExistingEmptyDirectoryAndRejectOccupiedTargets() async throws {
