@@ -31,7 +31,12 @@ private final class ProcessExecution: @unchecked Sendable {
         }
     }
 
-    func execute(executable: URL, arguments: [String], directory: URL?) throws -> CommandOutput {
+    func execute(
+        executable: URL,
+        arguments: [String],
+        directory: URL?,
+        onOutput: (@Sendable (String) -> Void)?
+    ) throws -> CommandOutput {
         let stdout = Pipe()
         let stderr = Pipe()
         process.executableURL = executable
@@ -59,10 +64,10 @@ private final class ProcessExecution: @unchecked Sendable {
         let group = DispatchGroup()
         group.enter()
         DispatchQueue.global(qos: .userInitiated).async {
-            errorData.set(stderr.fileHandleForReading.readDataToEndOfFile())
+            errorData.set(Self.readOutput(stderr.fileHandleForReading, onOutput: onOutput))
             group.leave()
         }
-        let outputData = stdout.fileHandleForReading.readDataToEndOfFile()
+        let outputData = Self.readOutput(stdout.fileHandleForReading, onOutput: onOutput)
         process.waitUntilExit()
         group.wait()
 
@@ -77,6 +82,34 @@ private final class ProcessExecution: @unchecked Sendable {
             stderr: String(decoding: errorData.get(), as: UTF8.self),
             exitCode: process.terminationStatus
         )
+    }
+
+    /// 按完整行推送输出，保留跨管道读取边界的 UTF-8 字节，结束时补发末尾无换行的文本。
+    private static func readOutput(
+        _ handle: FileHandle,
+        onOutput: (@Sendable (String) -> Void)?
+    ) -> Data {
+        guard let onOutput else {
+            return handle.readDataToEndOfFile()
+        }
+        var allData = Data()
+        var pending = Data()
+        while true {
+            let chunk = handle.availableData
+            if chunk.isEmpty {
+                break
+            }
+            allData.append(chunk)
+            pending.append(chunk)
+            if let newline = pending.lastIndex(of: 0x0A) {
+                onOutput(String(decoding: pending[...newline], as: UTF8.self))
+                pending.removeSubrange(...newline)
+            }
+        }
+        if !pending.isEmpty {
+            onOutput(String(decoding: pending, as: UTF8.self))
+        }
+        return allData
     }
 }
 
@@ -102,7 +135,8 @@ public enum ProcessRunner {
     public static func run(
         executable: URL,
         arguments: [String],
-        directory: URL? = nil
+        directory: URL? = nil,
+        onOutput: (@Sendable (String) -> Void)? = nil
     ) async throws -> CommandOutput {
         let execution = ProcessExecution()
         return try await withTaskCancellationHandler {
@@ -112,7 +146,8 @@ public enum ProcessRunner {
                         continuation.resume(returning: try execution.execute(
                             executable: executable,
                             arguments: arguments,
-                            directory: directory
+                            directory: directory,
+                            onOutput: onOutput
                         ))
                     } catch {
                         continuation.resume(throwing: error)

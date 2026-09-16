@@ -2,6 +2,14 @@ import AppKit
 import SwiftUI
 import SVNCore
 
+struct CheckoutProgress {
+    let startedAt = Date()
+    var lastOutputAt = Date()
+    var completedItemCount = 0
+    var lastCompletedPath: String?
+    var isOpeningWorkingCopy = false
+}
+
 @MainActor
 final class AppModel: ObservableObject {
     @Published var workingCopy: WorkingCopy?
@@ -18,6 +26,7 @@ final class AppModel: ObservableObject {
     @Published var executablePath: String = UserDefaults.standard.string(forKey: "svnExecutable")
         ?? SVNClient.discoverExecutable()?.path ?? ""
     @Published var showHistory = false
+    @Published private(set) var checkoutProgress: CheckoutProgress?
     private var operationTask: Task<Void, Never>?
     private var diffTask: Task<Void, Never>?
 
@@ -115,7 +124,32 @@ final class AppModel: ObservableObject {
     func checkout(repository: String, destination: URL) {
         perform("检出仓库") {
             let client = try self.client()
-            self.result = try await client.checkout(repository: repository, destination: destination)
+            self.checkoutProgress = CheckoutProgress()
+            self.result = "正在连接仓库，检出到：\(destination.path)\n"
+            // 先消费完输出再发布完成/失败，避免后台回调覆盖终态或下一次操作。
+            let (stream, continuation) = AsyncStream<String>.makeStream()
+            let reader = Task { @MainActor in
+                for await text in stream {
+                    self.receiveCheckoutOutput(text)
+                }
+            }
+            let output: String
+            do {
+                output = try await client.checkout(repository: repository, destination: destination) { text in
+                    continuation.yield(text)
+                }
+                continuation.finish()
+                await reader.value
+            } catch {
+                continuation.finish()
+                await reader.value
+                if error is CancellationError {
+                    throw SVNError("检出已中断；已下载内容保留在目标目录：\(destination.path)\n\n\(self.result)")
+                }
+                throw error
+            }
+            self.checkoutProgress?.isOpeningWorkingCopy = true
+            self.operation = "打开检出的工作副本"
             let copy = try await client.workingCopy(at: destination)
             let entries = try await client.status(at: copy.root)
             self.workingCopy = copy
@@ -127,6 +161,17 @@ final class AppModel: ObservableObject {
             self.message = ""
             self.showHistory = false
             self.remember(copy.root)
+            self.result = "检出完成，已打开：\(destination.path)\n\n\(output)"
+        }
+    }
+
+    /// SVN 的 A 通知表示文件或目录已完成检出，不将它误当作正在传输的文件或百分比。
+    private func receiveCheckoutOutput(_ text: String) {
+        result += text
+        checkoutProgress?.lastOutputAt = Date()
+        for line in text.split(separator: "\n") where line.hasPrefix("A    ") {
+            checkoutProgress?.completedItemCount += 1
+            checkoutProgress?.lastCompletedPath = String(line.dropFirst(5))
         }
     }
 
@@ -209,6 +254,7 @@ final class AppModel: ObservableObject {
         operation = title
         operationTask = Task {
             defer {
+                checkoutProgress = nil
                 operation = ""
                 operationTask = nil
             }

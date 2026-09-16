@@ -46,7 +46,11 @@ public struct SVNClient: Sendable {
     }
 
     /// 递归检出当前仓库目录的全部内容，外部引用仍由用户单独管理。
-    public func checkout(repository: String, destination: URL) async throws -> String {
+    public func checkout(
+        repository: String,
+        destination: URL,
+        onOutput: (@Sendable (String) -> Void)? = nil
+    ) async throws -> String {
         let target = try Self.repositoryTarget(repository)
         let fileManager = FileManager.default
         var isDirectory: ObjCBool = false
@@ -60,7 +64,7 @@ public struct SVNClient: Sendable {
         }
         let output = try await command([
             "checkout", "--depth", "infinity", "--ignore-externals", "--", target, destination.path
-        ])
+        ], onOutput: onOutput)
         return output.stdout + output.stderr
     }
 
@@ -151,11 +155,16 @@ public struct SVNClient: Sendable {
         return "./" + path + "@"
     }
 
-    private func command(_ arguments: [String], in directory: URL? = nil) async throws -> CommandOutput {
+    private func command(
+        _ arguments: [String],
+        in directory: URL? = nil,
+        onOutput: (@Sendable (String) -> Void)? = nil
+    ) async throws -> CommandOutput {
         let output = try await ProcessRunner.run(
             executable: executable,
             arguments: ["--non-interactive"] + arguments,
-            directory: directory
+            directory: directory,
+            onOutput: onOutput
         )
         guard output.exitCode == 0 else {
             throw SVNError("SVN 退出码 \(output.exitCode)\n\(output.stderr)\(output.stdout)")

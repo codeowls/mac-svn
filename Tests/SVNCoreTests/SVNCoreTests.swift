@@ -200,24 +200,91 @@ struct IntegrationTests {
 
 @Suite("子进程执行")
 struct ProcessTests {
-    @Test func cancellationStopsProcess() async throws {
+    @Test func streamsBeforeExitAndPreservesSplitUTF8() async throws {
+        let marker = FileManager.default.temporaryDirectory.appendingPathComponent("stream-ack-\(UUID().uuidString)")
+        let (stream, continuation) = AsyncStream<String>.makeStream()
         let task = Task {
-            try await ProcessRunner.run(executable: URL(fileURLWithPath: "/bin/sleep"), arguments: ["20"])
+            defer { continuation.finish() }
+            // 子进程必须在退出前收到读取方的确认，否则以 9 退出，避免只在结束后回调也通过测试。
+            return try await ProcessRunner.run(
+                executable: URL(fileURLWithPath: "/bin/sh"),
+                arguments: ["-c", #"""
+                printf '\344'
+                sleep 0.05
+                printf '\270\255\346\226\207 first\n'
+                printf 'warning\n' >&2
+                i=0
+                while [ ! -f "$1" ] && [ "$i" -lt 100 ]; do
+                    sleep 0.02
+                    i=$((i + 1))
+                done
+                if [ ! -f "$1" ]; then
+                    exit 9
+                fi
+                printf 'done'
+                exit 7
+                """#, "stream-test", marker.path],
+                onOutput: { continuation.yield($0) }
+            )
         }
-        try await Task.sleep(for: .milliseconds(100))
-        task.cancel()
+        var received = ""
+        for await text in stream {
+            received += text
+            if text.contains("中文 first\n") {
+                try Data().write(to: marker)
+            }
+        }
+        let output = try await task.value
+        #expect(output.exitCode == 7)
+        #expect(output.stdout == "中文 first\ndone")
+        #expect(output.stderr == "warning\n")
+        #expect(received.contains("中文 first\n"))
+        #expect(received.contains("warning\n"))
+        #expect(received.contains("done"))
+        #expect(!received.contains("�"))
+    }
+
+    @Test func cancellationStopsProcess() async throws {
+        let (stream, continuation) = AsyncStream<String>.makeStream()
+        let task = Task {
+            defer { continuation.finish() }
+            return try await ProcessRunner.run(
+                executable: URL(fileURLWithPath: "/bin/sh"),
+                arguments: ["-c", "printf 'started\\n'; exec /bin/sleep 20"],
+                onOutput: { continuation.yield($0) }
+            )
+        }
+        var received = ""
+        for await text in stream {
+            received += text
+            task.cancel()
+        }
         await #expect(throws: CancellationError.self) { try await task.value }
+        #expect(received == "started\n")
     }
 
     @Test func drainsBothPipesAndReportsExitCode() async throws {
+        let (stream, continuation) = AsyncStream<String>.makeStream()
+        let reader = Task {
+            var lines: [String] = []
+            for await text in stream {
+                lines += text.split(separator: "\n").map(String.init)
+            }
+            return lines
+        }
         // Fixed test script only; production SVN invocation never uses a shell.
         let output = try await ProcessRunner.run(
             executable: URL(fileURLWithPath: "/bin/sh"),
-            arguments: ["-c", "i=0; while [ $i -lt 6000 ]; do echo stdout; echo stderr >&2; i=$((i + 1)); done; exit 7"]
+            arguments: ["-c", "i=0; while [ $i -lt 6000 ]; do echo stdout; echo stderr >&2; i=$((i + 1)); done; exit 7"],
+            onOutput: { continuation.yield($0) }
         )
+        continuation.finish()
+        let lines = await reader.value
         #expect(output.exitCode == 7)
         #expect(output.stdout.split(separator: "\n").count == 6000)
         #expect(output.stderr.split(separator: "\n").count == 6000)
+        #expect(lines.filter { $0 == "stdout" }.count == 6000)
+        #expect(lines.filter { $0 == "stderr" }.count == 6000)
     }
 }
 

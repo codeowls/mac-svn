@@ -66,6 +66,11 @@ struct ContentView: View {
             Text(model.errorMessage ?? "")
         }
         .onChange(of: model.focusedPath) { _, _ in model.loadDiff() }
+        .onChange(of: model.checkoutProgress?.startedAt) { _, startedAt in
+            if startedAt != nil {
+                showOutput = true
+            }
+        }
     }
 
     private var sidebar: some View {
@@ -96,39 +101,32 @@ struct ContentView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 4) {
                         ForEach(model.recentPaths, id: \.self) { path in
-                            HStack(spacing: 4) {
-                                Button {
-                                    filter = ""
-                                    model.open(URL(fileURLWithPath: path))
-                                } label: {
-                                    HStack(alignment: .top, spacing: 10) {
-                                        Image(systemName: "folder").foregroundStyle(.secondary).padding(.top, 2)
-                                        VStack(alignment: .leading, spacing: 5) {
-                                            Text(URL(fileURLWithPath: path).lastPathComponent)
-                                                .font(.body.weight(.medium)).lineLimit(1)
-                                            Text(path).font(.caption2).foregroundStyle(.secondary)
-                                                .lineLimit(1).truncationMode(.middle)
-                                        }
-                                        Spacer(minLength: 0)
+                            Button {
+                                filter = ""
+                                model.open(URL(fileURLWithPath: path))
+                            } label: {
+                                HStack(alignment: .top, spacing: 10) {
+                                    Image(systemName: "folder").foregroundStyle(.secondary).padding(.top, 2)
+                                    VStack(alignment: .leading, spacing: 5) {
+                                        Text(URL(fileURLWithPath: path).lastPathComponent)
+                                            .font(.body.weight(.medium)).lineLimit(1)
+                                        Text(path).font(.caption2).foregroundStyle(.secondary)
+                                            .lineLimit(1).truncationMode(.middle)
                                     }
-                                    .padding(10).frame(maxWidth: .infinity, alignment: .leading)
-                                    .contentShape(Rectangle())
+                                    Spacer(minLength: 0)
                                 }
-                                .buttonStyle(.plain).help(path).disabled(model.isBusy)
-                                Button {
-                                    model.removeRecentPath(path)
-                                } label: {
-                                    Image(systemName: "xmark")
-                                        .font(.caption).foregroundStyle(.secondary)
-                                        .padding(6).contentShape(Rectangle())
-                                }
-                                .buttonStyle(.plain)
-                                .help("从最近列表移除，不删除本地文件")
-                                .accessibilityLabel("从最近列表移除 \(path)")
-                                .padding(.trailing, 6)
+                                .padding(10).frame(maxWidth: .infinity, alignment: .leading)
+                                .contentShape(Rectangle())
                             }
+                            .buttonStyle(.plain).help(path).disabled(model.isBusy)
                             .background(model.workingCopy?.root.path == path ? Color.primary.opacity(0.08) : .clear,
                                         in: RoundedRectangle(cornerRadius: 10))
+                            .contextMenu {
+                                Button("删除", role: .destructive) {
+                                    model.removeRecentPath(path)
+                                }
+                                .help("仅从最近列表删除，不删除本地文件")
+                            }
                         }
                     }
                 }
@@ -407,10 +405,45 @@ struct ContentView: View {
                 }
                 .buttonStyle(.plain).font(.caption).foregroundStyle(.secondary)
             }
+            if let progress = model.checkoutProgress {
+                TimelineView(.periodic(from: progress.startedAt, by: 1)) { context in
+                    VStack(alignment: .leading, spacing: 5) {
+                        HStack {
+                            Text("已检出 \(progress.completedItemCount) 项（文件/目录）")
+                            Spacer()
+                            let elapsed = Int(context.date.timeIntervalSince(progress.startedAt))
+                            Text("已用时 \(elapsed / 60) 分 \(elapsed % 60) 秒")
+                                .monospacedDigit()
+                        }
+                        if progress.isOpeningWorkingCopy {
+                            Text("下载完成，正在读取工作副本…")
+                        } else if let path = progress.lastCompletedPath {
+                            Text("最近完成：\(path)")
+                                .lineLimit(1).truncationMode(.middle).help(path)
+                        } else {
+                            Text("正在连接仓库，等待检出输出…")
+                        }
+                        if !progress.isOpeningWorkingCopy,
+                           context.date.timeIntervalSince(progress.lastOutputAt) >= 5 {
+                            Text("等待 SVN 新输出；大文件传输时可能暂时没有新记录，可取消操作。")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .font(.caption)
+                }
+            }
             if showOutput {
-                ScrollView {
-                    Text(model.result).font(.system(size: 11, design: .monospaced)).textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        Text(model.result).font(.system(size: 11, design: .monospaced)).textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Color.clear.frame(height: 1).id("output-end")
+                    }
+                    .onChange(of: model.result) { _, _ in
+                        if model.checkoutProgress != nil {
+                            proxy.scrollTo("output-end", anchor: .bottom)
+                        }
+                    }
                 }
                 .frame(height: 100)
             }
