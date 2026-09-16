@@ -190,3 +190,68 @@ struct ProcessTests {
         #expect(output.stderr.split(separator: "\n").count == 6000)
     }
 }
+
+@Suite("远端分支浏览与检出")
+struct RepositoryTests {
+    @Test func directoryListingAndInvalidResponses() throws {
+        let entries = try SVNXML.repositoryEntries("""
+        <lists><list path="https://example.test/project">
+        <entry kind="file"><name>README &amp; notes</name><commit revision="3"><author>tester</author></commit></entry>
+        <entry kind="dir"><name>branches</name><commit revision="2"><author>tester</author></commit></entry>
+        </list></lists>
+        """)
+        #expect(entries.map(\.name) == ["branches", "README & notes"])
+        #expect(entries.first?.isDirectory == true)
+        #expect(try SVNXML.repositoryEntries("<lists><list path='x'/></lists>").isEmpty)
+        #expect(throws: (any Error).self) { try SVNXML.repositoryEntries("<info/>") }
+        #expect(throws: (any Error).self) {
+            try SVNXML.repositoryEntries("<lists><list><entry kind='dir'/></list></lists>")
+        }
+        #expect(throws: (any Error).self) {
+            try SVNXML.repositoryInfo("<info><entry kind='file'><url>file:///a</url></entry></info>")
+        }
+    }
+
+    @Test func invalidURLsAndEncodedBranchNames() async throws {
+        let f = try await Fixture.create()
+        for invalid in ["/local/path", "https://", "https://user:password@example.test/repo",
+                        "https://example.test/repo?secret=1", "https://example.test/repo#branch"] {
+            await #expect(throws: (any Error).self) { try await f.client.listRepository(invalid) }
+        }
+        let child = try SVNClient.childRepositoryURL(parent: "https://example.test/branches", name: "中文 @ # &")
+        #expect(URL(string: child)?.lastPathComponent == "中文 @ # &")
+        #expect(URLComponents(string: child)?.fragment == nil)
+        #expect(throws: (any Error).self) {
+            try SVNClient.childRepositoryURL(parent: "https://example.test/repo", name: "../outside")
+        }
+    }
+
+    @Test func browseBranchesAndCheckoutOnlySelectedDirectory() async throws {
+        let f = try await Fixture.create()
+        let trunk = try SVNClient.childRepositoryURL(parent: f.repository.absoluteString, name: "trunk")
+        let branches = try SVNClient.childRepositoryURL(parent: f.repository.absoluteString, name: "branches")
+        try await f.svn(["mkdir", trunk + "@", branches + "@", "-m", "创建布局"])
+        let source = f.root.appendingPathComponent("trunk-copy")
+        _ = try await f.client.checkout(repository: trunk, destination: source)
+        try f.write("README.txt", "branch content\n", in: source)
+        _ = try await f.client.add(paths: ["README.txt"], at: source)
+        _ = try await f.client.commit(paths: ["README.txt"], message: "初始化", at: source)
+        let branch = try SVNClient.childRepositoryURL(parent: branches, name: "发布 @ 中文")
+        try await f.svn(["copy", trunk + "@", branch + "@", "-m", "创建分支"])
+        let rootEntries = try await f.client.listRepository(f.repository.absoluteString)
+        #expect(Set(rootEntries.map(\.name)) == ["trunk", "branches"])
+        let branchEntries = try await f.client.listRepository(branches)
+        #expect(branchEntries.first?.name == "发布 @ 中文")
+        let info = try await f.client.repositoryLocation(branch)
+        #expect(URL(string: info.url)?.lastPathComponent == "发布 @ 中文")
+        let destination = f.root.appendingPathComponent("selected-branch")
+        _ = try await f.client.checkout(repository: info.url, destination: destination)
+        #expect(try String(contentsOf: destination.appendingPathComponent("README.txt"), encoding: .utf8) == "branch content\n")
+        #expect(!FileManager.default.fileExists(atPath: destination.appendingPathComponent("trunk").path))
+        let copy = try await f.client.workingCopy(at: destination)
+        #expect(copy.repositoryURL == info.url)
+        await #expect(throws: (any Error).self) {
+            try await f.client.repositoryLocation(branches + "/does-not-exist")
+        }
+    }
+}

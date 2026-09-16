@@ -41,8 +41,11 @@ final class AppModel: ObservableObject {
     func chooseWorkingCopy() {
         let panel = NSOpenPanel()
         panel.title = "打开 SVN 工作副本"
+        panel.prompt = "打开"
+        panel.message = "选择已经检出的本地工作副本。远端仓库请使用“检出远端”。"
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
         guard panel.runModal() == .OK, let url = panel.url else { return }
         open(url)
     }

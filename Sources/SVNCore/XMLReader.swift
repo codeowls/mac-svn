@@ -72,6 +72,43 @@ final class XMLReader: NSObject, XMLParserDelegate {
 }
 
 enum SVNXML {
+    static func repositoryInfo(_ xml: String) throws -> RepositoryLocation {
+        let root = try XMLReader.parse(xml)
+        guard root.name == "info",
+              let entry = root.child("entry"),
+              entry.attributes["kind"] == "dir",
+              let url = entry.child("url")?.text,
+              let repositoryRoot = entry.child("repository")?.child("root")?.text,
+              let revision = entry.attributes["revision"] else {
+            throw SVNError("请选择远端仓库中的目录或分支，不能检出单个文件。")
+        }
+        return RepositoryLocation(url: url, rootURL: repositoryRoot, revision: revision)
+    }
+
+    static func repositoryEntries(_ xml: String) throws -> [RepositoryEntry] {
+        let root = try XMLReader.parse(xml)
+        guard root.name == "lists", let list = root.child("list") else {
+            throw SVNError("SVN 仓库目录响应格式不正确")
+        }
+        return try list.children.filter { $0.name == "entry" }.map { entry in
+            guard let name = entry.child("name")?.text,
+                  let kind = entry.attributes["kind"], ["dir", "file"].contains(kind) else {
+                throw SVNError("SVN 仓库目录响应缺少必要字段")
+            }
+            return RepositoryEntry(
+                name: name,
+                isDirectory: kind == "dir",
+                revision: entry.child("commit")?.attributes["revision"] ?? "",
+                author: entry.child("commit")?.child("author")?.text ?? ""
+            )
+        }.sorted { left, right in
+            if left.isDirectory != right.isDirectory {
+                return left.isDirectory
+            }
+            return left.name.localizedStandardCompare(right.name) == .orderedAscending
+        }
+    }
+
     static func status(_ xml: String) throws -> [StatusEntry] {
         let root = try XMLReader.parse(xml)
         guard root.name == "status" else { throw SVNError("SVN 状态响应格式不正确") }

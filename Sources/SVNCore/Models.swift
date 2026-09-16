@@ -6,6 +6,20 @@ public struct WorkingCopy: Sendable {
     public let revision: String
 }
 
+public struct RepositoryEntry: Identifiable, Sendable, Equatable {
+    public var id: String { name }
+    public let name: String
+    public let isDirectory: Bool
+    public let revision: String
+    public let author: String
+}
+
+public struct RepositoryLocation: Sendable, Equatable {
+    public let url: String
+    public let rootURL: String
+    public let revision: String
+}
+
 public struct StatusEntry: Identifiable, Sendable, Equatable {
     public var id: String { path }
     public let path: String

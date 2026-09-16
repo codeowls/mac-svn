@@ -46,20 +46,51 @@ public struct SVNClient: Sendable {
     }
 
     public func checkout(repository: String, destination: URL) async throws -> String {
-        guard let url = URLComponents(string: repository),
-              let scheme = url.scheme,
-              ["https", "http", "svn", "svn+ssh", "file"].contains(scheme),
-              url.password == nil,
-              !repository.contains("\n") else {
-            throw SVNError("请输入有效的 SVN 仓库 URL，且不要在 URL 中包含密码。")
-        }
+        let target = try Self.repositoryTarget(repository)
         guard !FileManager.default.fileExists(atPath: destination.path) else {
             throw SVNError("检出目标已存在，请选择一个新的目录名称。")
         }
         let output = try await command([
-            "checkout", "--ignore-externals", "--", repository + "@", destination.path
+            "checkout", "--ignore-externals", "--", target, destination.path
         ])
         return output.stdout + output.stderr
+    }
+
+    /// Query repository metadata without requiring a local working copy.
+    public func repositoryLocation(_ repository: String) async throws -> RepositoryLocation {
+        let target = try Self.repositoryTarget(repository)
+        let output = try await command(["info", "--xml", "--revision", "HEAD", "--", target])
+        return try SVNXML.repositoryInfo(output.stdout)
+    }
+
+    /// Read one remote directory at a time, including nonstandard branch layouts.
+    public func listRepository(_ repository: String) async throws -> [RepositoryEntry] {
+        let target = try Self.repositoryTarget(repository)
+        let output = try await command(["list", "--xml", "--revision", "HEAD", "--", target])
+        return try SVNXML.repositoryEntries(output.stdout)
+    }
+
+    public static func childRepositoryURL(parent: String, name: String) throws -> String {
+        _ = try repositoryTarget(parent)
+        guard !name.isEmpty, ![".", ".."].contains(name), !name.contains("/") else {
+            throw SVNError("无效的仓库目录名称")
+        }
+        guard let url = URL(string: parent) else {
+            throw SVNError("无效的仓库 URL")
+        }
+        return url.appendingPathComponent(name).absoluteString
+    }
+
+    private static func repositoryTarget(_ repository: String) throws -> String {
+        guard let url = URLComponents(string: repository),
+              let scheme = url.scheme?.lowercased(),
+              ["https", "http", "svn", "svn+ssh", "file"].contains(scheme),
+              scheme == "file" || !(url.host ?? "").isEmpty,
+              url.password == nil, url.query == nil, url.fragment == nil,
+              !repository.contains(where: { $0.isNewline || $0 == "\0" }) else {
+            throw SVNError("请输入完整的 SVN 仓库或分支 URL，且不要在 URL 中包含密码、查询参数或片段。")
+        }
+        return repository + "@"
     }
 
     public func add(paths: [String], at directory: URL) async throws -> String {
