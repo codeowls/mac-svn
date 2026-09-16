@@ -1,0 +1,122 @@
+import Foundation
+#if canImport(FoundationXML)
+import FoundationXML
+#endif
+
+/// A small XML tree preserves escaped names, multiline log messages and nested SVN elements.
+final class XMLNode {
+    let name: String
+    let attributes: [String: String]
+    var text = ""
+    var children: [XMLNode] = []
+
+    init(name: String, attributes: [String: String]) {
+        self.name = name
+        self.attributes = attributes
+    }
+
+    func child(_ name: String) -> XMLNode? {
+        children.first { $0.name == name }
+    }
+
+    func descendants(_ name: String) -> [XMLNode] {
+        children.flatMap { child in
+            (child.name == name ? [child] : []) + child.descendants(name)
+        }
+    }
+}
+
+final class XMLReader: NSObject, XMLParserDelegate {
+    private var stack: [XMLNode] = []
+    private var root: XMLNode?
+
+    static func parse(_ xml: String) throws -> XMLNode {
+        let reader = XMLReader()
+        let parser = XMLParser(data: Data(xml.utf8))
+        parser.shouldResolveExternalEntities = false
+        parser.delegate = reader
+        guard parser.parse(), let root = reader.root else {
+            throw SVNError("无法解析 SVN XML：\(parser.parserError?.localizedDescription ?? "缺少根节点")")
+        }
+        return root
+    }
+
+    func parser(
+        _ parser: XMLParser,
+        didStartElement elementName: String,
+        namespaceURI: String?,
+        qualifiedName qName: String?,
+        attributes attributeDict: [String: String]
+    ) {
+        let node = XMLNode(name: elementName, attributes: attributeDict)
+        if let parent = stack.last {
+            parent.children.append(node)
+        } else {
+            root = node
+        }
+        stack.append(node)
+    }
+
+    func parser(_ parser: XMLParser, foundCharacters string: String) {
+        stack.last?.text.append(string)
+    }
+
+    func parser(
+        _ parser: XMLParser,
+        didEndElement elementName: String,
+        namespaceURI: String?,
+        qualifiedName qName: String?
+    ) {
+        stack.removeLast()
+    }
+}
+
+enum SVNXML {
+    static func status(_ xml: String) throws -> [StatusEntry] {
+        let root = try XMLReader.parse(xml)
+        guard root.name == "status" else { throw SVNError("SVN 状态响应格式不正确") }
+        return try root.descendants("entry").map { node in
+            guard let path = node.attributes["path"],
+                  let status = node.child("wc-status"),
+                  let item = status.attributes["item"],
+                  let properties = status.attributes["props"] else {
+                throw SVNError("SVN 状态响应缺少必要字段")
+            }
+            return StatusEntry(
+                path: path,
+                item: item,
+                properties: properties,
+                treeConflict: status.attributes["tree-conflicted"] == "true",
+                copied: status.attributes["copied"] == "true"
+            )
+        }.sorted { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
+    }
+
+    static func info(_ xml: String) throws -> WorkingCopy {
+        let root = try XMLReader.parse(xml)
+        guard root.name == "info",
+              let entry = root.child("entry"),
+              let path = entry.child("wc-info")?.child("wcroot-abspath")?.text,
+              let url = entry.child("url")?.text,
+              let revision = entry.attributes["revision"] else {
+            throw SVNError("所选目录不是有效的 SVN 工作副本")
+        }
+        return WorkingCopy(root: URL(fileURLWithPath: path), repositoryURL: url, revision: revision)
+    }
+
+    static func log(_ xml: String) throws -> [LogEntry] {
+        let root = try XMLReader.parse(xml)
+        guard root.name == "log" else { throw SVNError("SVN 历史响应格式不正确") }
+        return try root.children.filter { $0.name == "logentry" }.map { node in
+            guard let revision = node.attributes["revision"] else {
+                throw SVNError("SVN 历史响应缺少版本号")
+            }
+            return LogEntry(
+                revision: revision,
+                author: node.child("author")?.text ?? "（无作者）",
+                date: node.child("date")?.text ?? "",
+                message: node.child("msg")?.text ?? ""
+            )
+        }
+    }
+}
