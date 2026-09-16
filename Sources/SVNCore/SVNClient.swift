@@ -58,7 +58,9 @@ public struct SVNClient: Sendable {
             guard isDirectory.boolValue else {
                 throw SVNError("检出目标不是文件夹，请选择或新建一个空文件夹。")
             }
-            guard try fileManager.contentsOfDirectory(atPath: destination.path).isEmpty else {
+            // Finder 的目录显示设置不影响检出，其他隐藏文件仍按非空内容处理。
+            let contents = try fileManager.contentsOfDirectory(atPath: destination.path)
+            guard contents.allSatisfy({ $0 == ".DS_Store" }) else {
                 throw SVNError("检出目标文件夹不为空，请选择或新建一个空文件夹；已有工作副本请直接打开。")
             }
         }
