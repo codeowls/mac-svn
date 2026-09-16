@@ -1,0 +1,16 @@
+Use case: logo-brand
+Asset type: final production raster app icon for Mac SVN, a native macOS Subversion client.
+Primary request: create ONE exceptionally simple, elegant, professional macOS application icon, inspired by Apple's principles of a single recognizable idea, minimal shapes, balanced negative space, and clear small-size legibility.
+Scene/backdrop: a square 1024 x 1024 PNG canvas with GENUINELY TRANSPARENT outer background, no checkerboard drawn in. One front-facing macOS rounded-square tile centered in the canvas with equal generous transparent margins, approximately 80% canvas width. The tile is opaque.
+Subject: one bold white version-control branching glyph on the tile. A vertical trunk connects two round endpoint nodes; one gently curving side branch connects to a third round node. Exactly three nodes. Restrained, precise geometric construction, substantial uniform stroke weight, beautiful optical balance. The connected glyph suggests reliable revision history and branching. No arrows and no letterforms.
+Style/medium: polished native macOS utility icon, clean sculpted graphic with extremely subtle depth. System-blue accent tile consistent with the app's existing blue interface; white glyph. Soft restrained tonal gradient and a faint inset edge, not glossy plastic or chrome. Strong high contrast.
+Composition/framing: orthographic straight-on, no tilt or perspective, centered symbol comfortably inside the tile with broad interior breathing room. Crisp edges and smooth continuous corners. The symbol should remain immediately readable at 32px.
+Text: no text at all.
+Constraints: one icon only, no presentation board, no additional symbols, no screenshots, no desktop mockup, no watermark, no Apple logo, no Git logo, no trademark imitation, no decorative sparkles, no busy texture, no heavy drop shadow. Deliver an actual usable transparent PNG app-icon asset.
+
+Refinement prompt (built-in image_gen edit):
+Use case: precise-object-edit
+Asset type: final macOS Mac SVN app icon.
+Input image: edit target, the previously generated blue rounded-square app icon with a white three-node branching glyph.
+Change ONLY the outer edge quality: remove the cyan/blue stray pixels, detached dots, rough bumps and wispy artifacts around the rounded-square perimeter. Make the perimeter a perfectly smooth, continuous, clean antialiased rounded square suitable for a production macOS icon. Absolutely no visible detached pixels or edge halos.
+Preserve exactly the icon concept, existing proportions, glyph shape, exactly three nodes, colors, restrained gradient, center alignment, tile size and equal transparent padding. Preserve a genuinely transparent outer background. Do not add shadows, text, objects or decorations. Return a single square PNG, ideally 1024 by 1024, not a mockup.
