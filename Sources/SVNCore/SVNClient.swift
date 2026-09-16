@@ -45,13 +45,14 @@ public struct SVNClient: Sendable {
         return output.stdout + output.stderr
     }
 
+    /// 递归检出当前仓库目录的全部内容，外部引用仍由用户单独管理。
     public func checkout(repository: String, destination: URL) async throws -> String {
         let target = try Self.repositoryTarget(repository)
         guard !FileManager.default.fileExists(atPath: destination.path) else {
             throw SVNError("检出目标已存在，请选择一个新的目录名称。")
         }
         let output = try await command([
-            "checkout", "--ignore-externals", "--", target, destination.path
+            "checkout", "--depth", "infinity", "--ignore-externals", "--", target, destination.path
         ])
         return output.stdout + output.stderr
     }

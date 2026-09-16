@@ -8,12 +8,24 @@ struct CheckoutView: View {
     @Environment(\.dismiss) private var dismiss
     @ViewState private var parent: URL?
     @ViewState private var folderName = ""
+    @ViewState private var suggestedFolderName = ""
 
-    private var isValid: Bool {
-        !browser.checkoutURL.isEmpty && parent != nil
-            && !folderName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && !folderName.contains("/") && !folderName.contains("\0")
-            && ![".", ".."].contains(folderName)
+    private var destination: URL? {
+        parent?.appendingPathComponent(folderName, isDirectory: true)
+    }
+
+    private var checkoutUnavailableReason: String? {
+        if model.isBusy { return "请等待当前操作完成。" }
+        if browser.isLoading { return "正在浏览仓库，请稍候。" }
+        if browser.checkoutURL.isEmpty { return "请输入仓库或分支地址。" }
+        if parent == nil { return "请选择本地保存位置。" }
+        if folderName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "请填写新建文件夹名称，检出时会自动创建。"
+        }
+        if folderName.contains("/") || folderName.contains("\0") || [".", ".."].contains(folderName) {
+            return "请输入单个文件夹名称，不能包含 /，也不能使用 . 或 ..。"
+        }
+        return nil
     }
 
     var body: some View {
@@ -41,7 +53,7 @@ struct CheckoutView: View {
                 repositoryList
             }
             VStack(alignment: .leading, spacing: 10) {
-                Text("保存到本机").font(.headline)
+                Text("本地保存位置（父文件夹）").font(.headline)
                 HStack {
                     Label(parent?.path ?? "选择存放工作副本的文件夹", systemImage: "folder")
                         .foregroundStyle(parent == nil ? .secondary : .primary)
@@ -49,10 +61,19 @@ struct CheckoutView: View {
                     Spacer()
                     Button("选择文件夹…") { chooseParent() }
                 }
-                TextField("新建文件夹名称，例如 my-project", text: $folderName)
+                Text("新建工作副本文件夹（必填）").font(.subheadline)
+                TextField("例如 my-project，检出时自动创建", text: $folderName)
                     .textFieldStyle(.roundedBorder)
+                if let destination, checkoutUnavailableReason == nil {
+                    Text("检出到：\(destination.path)")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .lineLimit(2).truncationMode(.middle).help(destination.path)
+                }
+                if let reason = checkoutUnavailableReason {
+                    Text(reason).font(.caption).foregroundStyle(.secondary)
+                }
             }
-            Text("私有仓库复用本机 SVN 已缓存的认证。目标文件夹须尚不存在；不检出 externals。")
+            Text("递归检出当前地址下的全部子目录和文件，不包含 externals（外部引用）。\n私有仓库复用本机 SVN 已缓存的认证；目标工作副本文件夹须尚不存在。")
                 .font(.caption).foregroundStyle(.secondary)
             Divider()
             HStack {
@@ -60,18 +81,20 @@ struct CheckoutView: View {
                 Spacer()
                 Button("取消", role: .cancel) { dismiss() }
                 Button("开始检出") {
-                    guard let parent else { return }
-                    model.checkout(repository: browser.checkoutURL,
-                                   destination: parent.appendingPathComponent(folderName, isDirectory: true))
+                    guard let destination else { return }
+                    model.checkout(repository: browser.checkoutURL, destination: destination)
                     dismiss()
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(!isValid || model.isBusy || browser.isLoading)
+                .disabled(checkoutUnavailableReason != nil)
             }
         }
         .padding(28)
         .frame(width: 660)
-        .onChange(of: browser.address) { _, _ in browser.addressChanged() }
+        .onChange(of: browser.address) { _, _ in
+            browser.addressChanged()
+            suggestFolderName()
+        }
         .onDisappear { browser.cancel() }
     }
 
@@ -137,13 +160,26 @@ struct CheckoutView: View {
         catch { browser.report(error) }
     }
 
+    /// 跟随仓库地址建议目录名，保留用户手动填写的名称。
+    private func suggestFolderName() {
+        let name = URL(string: browser.checkoutURL)?.lastPathComponent ?? ""
+        if folderName.isEmpty || folderName == suggestedFolderName {
+            folderName = name == "/" ? "" : name
+        }
+        suggestedFolderName = name
+    }
+
+    /// 允许在系统选择器中新建父文件夹；工作副本子目录由 SVN 创建。
     private func chooseParent() {
         let panel = NSOpenPanel()
         panel.title = "选择工作副本的保存位置"
         panel.prompt = "选择"
+        panel.message = "选择或新建父文件夹；工作副本将在其中按填写的名称自动创建。"
         panel.canChooseDirectories = true
+        panel.canCreateDirectories = true
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
+        panel.directoryURL = parent
         if panel.runModal() == .OK { parent = panel.url }
     }
 }

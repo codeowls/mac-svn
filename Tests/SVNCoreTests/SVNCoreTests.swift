@@ -234,8 +234,14 @@ struct RepositoryTests {
         let source = f.root.appendingPathComponent("trunk-copy")
         _ = try await f.client.checkout(repository: trunk, destination: source)
         try f.write("README.txt", "branch content\n", in: source)
-        _ = try await f.client.add(paths: ["README.txt"], at: source)
-        _ = try await f.client.commit(paths: ["README.txt"], message: "初始化", at: source)
+        try FileManager.default.createDirectory(
+            at: source.appendingPathComponent("资料/子目录/空目录"), withIntermediateDirectories: true
+        )
+        try f.write("资料/子目录/中文 @ 文件.txt", "nested content\n", in: source)
+        let paths = ["README.txt", "资料", "资料/子目录", "资料/子目录/空目录", "资料/子目录/中文 @ 文件.txt"]
+        _ = try await f.client.add(paths: paths, at: source)
+        try await f.svn(["propset", "svn:externals", "^/branches external-copy", "."], in: source)
+        _ = try await f.client.commit(paths: ["."] + paths, message: "初始化", at: source)
         let branch = try SVNClient.childRepositoryURL(parent: branches, name: "发布 @ 中文")
         try await f.svn(["copy", trunk + "@", branch + "@", "-m", "创建分支"])
         let rootEntries = try await f.client.listRepository(f.repository.absoluteString)
@@ -247,6 +253,15 @@ struct RepositoryTests {
         let destination = f.root.appendingPathComponent("selected-branch")
         _ = try await f.client.checkout(repository: info.url, destination: destination)
         #expect(try String(contentsOf: destination.appendingPathComponent("README.txt"), encoding: .utf8) == "branch content\n")
+        #expect(try String(
+            contentsOf: destination.appendingPathComponent("资料/子目录/中文 @ 文件.txt"), encoding: .utf8
+        ) == "nested content\n")
+        var isDirectory: ObjCBool = false
+        #expect(FileManager.default.fileExists(
+            atPath: destination.appendingPathComponent("资料/子目录/空目录").path, isDirectory: &isDirectory
+        ))
+        #expect(isDirectory.boolValue)
+        #expect(!FileManager.default.fileExists(atPath: destination.appendingPathComponent("external-copy").path))
         #expect(!FileManager.default.fileExists(atPath: destination.appendingPathComponent("trunk").path))
         let copy = try await f.client.workingCopy(at: destination)
         #expect(copy.repositoryURL == info.url)
