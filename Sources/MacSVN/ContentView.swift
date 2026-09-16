@@ -256,6 +256,10 @@ struct ContentView: View {
             HStack {
                 TextField("筛选文件路径", text: $filter)
                     .textFieldStyle(.roundedBorder)
+                Toggle("显示已忽略项", isOn: $model.showIgnored)
+                    .toggleStyle(.checkbox)
+                    .disabled(model.isBusy)
+                    .onChange(of: model.showIgnored) { _, _ in model.refresh() }
                 Text("\(visibleEntries.count) 项").font(.caption).foregroundStyle(.secondary)
             }
             .padding(12)
@@ -290,7 +294,7 @@ struct ContentView: View {
                                             Text(entry.label).font(.caption2).foregroundStyle(statusColor(entry))
                                                 .help(entry.item == "unversioned"
                                                     ? "仅存在于本地，尚未加入 SVN；点击查看说明"
-                                                    : "点击查看文件差异")
+                                                    : entry.item == "ignored" ? "匹配 SVN 忽略规则；点击查看说明" : "点击查看文件差异")
                                         }
                                         Spacer(minLength: 0)
                                         Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.tertiary)
@@ -325,7 +329,7 @@ struct ContentView: View {
     private func statusColor(_ entry: StatusEntry) -> Color {
         if entry.isConflict || entry.item == "deleted" { return .red }
         if entry.item == "added" { return .green }
-        return entry.item == "unversioned" ? .secondary : .orange
+        return ["unversioned", "ignored"].contains(entry.item) ? .secondary : .orange
     }
 
     private var commitEditor: some View {

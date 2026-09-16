@@ -49,24 +49,3 @@ struct MacSVNApp: App {
         }
     }
 }
-
-private struct SettingsView: View {
-    @ObservedObject var model: AppModel
-
-    var body: some View {
-        Form {
-            Text("SVN 可执行文件").font(.headline)
-            TextField("例如 /opt/homebrew/bin/svn", text: $model.executablePath)
-                .textFieldStyle(.roundedBorder)
-                .disabled(model.isBusy)
-            Text("未安装时，在终端运行：brew install subversion")
-                .font(.caption).foregroundStyle(.secondary)
-            Text("可在检出窗口或工具栏的“仓库账号”中登录。密码仅用于本次 App 会话；未登录时复用本机 SVN 缓存。App 不自动信任证书。")
-                .font(.callout)
-            Button("保存设置") { model.saveSettings() }
-                .disabled(model.isBusy)
-        }
-        .padding(24)
-        .frame(width: 540)
-    }
-}

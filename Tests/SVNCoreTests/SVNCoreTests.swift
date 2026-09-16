@@ -4,6 +4,30 @@ import Testing
 
 @Suite("SVN XML 与路径语义")
 struct XMLTests {
+    @Test func globalIgnorePatternsKeepSVNGlobSemantics() throws {
+        let patterns = try SVNConfiguration.normalizeIgnorePatterns(" .idea\n*.iml\t#*#  .idea  .*.swp \r\n")
+        #expect(patterns == ".idea *.iml #*# .*.swp")
+        #expect(try SVNConfiguration.normalizeIgnorePatterns(" \n\t") == "")
+        #expect(throws: SVNError.self) {
+            try SVNConfiguration.normalizeIgnorePatterns("*.tmp\0*.log")
+        }
+        #expect(throws: SVNError.self) {
+            try SVNConfiguration.executableURL(for: "/usr/bin")
+        }
+        #expect(throws: SVNError.self) {
+            try SVNConfiguration.executableURL(for: "svn")
+        }
+    }
+
+    @Test func executableTestChecksRealVersionAndRejectsNonSVN() async throws {
+        let executable = try #require(SVNClient.discoverExecutable())
+        let version = try await SVNClient(executable: executable).version()
+        #expect(version.split(separator: ".").count >= 3)
+        await #expect(throws: SVNError.self) {
+            try await SVNClient(executable: URL(fileURLWithPath: "/usr/bin/true")).version()
+        }
+    }
+
     @Test func diffLineNumbersAndSplitAlignment() {
         let diff = UnifiedDiff("""
         --- sample.txt (revision 1)
@@ -183,6 +207,58 @@ private struct Fixture {
 
 @Suite("真实本地 SVN 仓库集成")
 struct IntegrationTests {
+    @Test func globalIgnoresHideOnlyUnversionedItems() async throws {
+        let f = try await Fixture.create()
+        let baseline = SVNClient(executable: f.client.executable, globalIgnores: "")
+        try f.write("tracked.iml", "base\n")
+        _ = try await baseline.add(paths: ["tracked.iml"], at: f.first)
+        _ = try await baseline.commit(paths: ["tracked.iml"], message: "受控文件", at: f.first)
+        try f.write("tracked.iml", "modified\n")
+        try f.write("project.iml", "local project\n")
+        try f.write("#backup#", "backup\n")
+        try f.write("keep.txt", "keep\n")
+        try FileManager.default.createDirectory(at: f.first.appendingPathComponent(".idea"), withIntermediateDirectories: false)
+        try f.write(".idea/workspace.xml", "local settings\n")
+
+        let client = SVNClient(executable: f.client.executable, globalIgnores: ".idea\n*.iml #*#")
+        let hidden = try await client.status(at: f.first)
+        #expect(Set(hidden.map(\.path)) == ["tracked.iml", "keep.txt"])
+        #expect(hidden.first { $0.path == "tracked.iml" }?.item == "modified")
+        let shown = try await client.status(at: f.first, includeIgnored: true)
+        #expect(shown.first { $0.path == "project.iml" }?.item == "ignored")
+        #expect(shown.first { $0.path == ".idea" }?.item == "ignored")
+        #expect(shown.first { $0.path == "#backup#" }?.item == "ignored")
+        #expect(!shown.contains { $0.path == ".svn" })
+
+        let unchanged = try await baseline.status(at: f.first)
+        #expect(unchanged.first { $0.path == "project.iml" }?.item == "unversioned")
+        #expect(unchanged.first { $0.path == "keep.txt" }?.item == "unversioned")
+        #expect(try String(contentsOf: f.first.appendingPathComponent(".idea/workspace.xml"), encoding: .utf8) == "local settings\n")
+
+        _ = try await client.commit(paths: ["tracked.iml"], message: "忽略规则不影响受控修改", at: f.first)
+        let history = try await client.history(at: f.first)
+        #expect(history.first?.changedPaths.map(\.path) == ["/tracked.iml"])
+    }
+
+    @Test func globalIgnoreOverrideIsPerClientAndKeepsDirectoryProperties() async throws {
+        let f = try await Fixture.create()
+        try f.write("app-only.ignore-test", "app\n")
+        try f.write("property-only.ignore-test", "property\n")
+        try await f.svn(["propset", "svn:ignore", "property-only.ignore-test", "."])
+        let baselineBefore = try await f.client.status(at: f.first)
+        let client = SVNClient(executable: f.client.executable, globalIgnores: "app-only.ignore-test")
+        let overridden = try await client.status(at: f.first, includeIgnored: true)
+        #expect(overridden.first { $0.path == "app-only.ignore-test" }?.item == "ignored")
+        #expect(overridden.first { $0.path == "property-only.ignore-test" }?.item == "ignored")
+
+        let empty = SVNClient(executable: f.client.executable, globalIgnores: "")
+        let emptyStatus = try await empty.status(at: f.first)
+        #expect(emptyStatus.first { $0.path == "app-only.ignore-test" }?.item == "unversioned")
+        #expect(!emptyStatus.contains { $0.path == "property-only.ignore-test" })
+        let baselineAfter = try await f.client.status(at: f.first)
+        #expect(baselineBefore == baselineAfter)
+    }
+
     @Test func selectedCommitAndSpecialFilenames() async throws {
         let f = try await Fixture.create()
         let special = "中文 @ & file.txt"

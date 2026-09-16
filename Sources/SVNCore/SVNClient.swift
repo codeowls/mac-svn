@@ -3,10 +3,16 @@ import Foundation
 public struct SVNClient: Sendable {
     public let executable: URL
     private let authentication: SVNAuthentication?
+    private let globalIgnores: String?
 
-    public init(executable: URL, authentication: SVNAuthentication? = nil) {
+    public init(
+        executable: URL,
+        authentication: SVNAuthentication? = nil,
+        globalIgnores: String? = nil
+    ) {
         self.executable = executable
         self.authentication = authentication
+        self.globalIgnores = globalIgnores
     }
 
     public static func discoverExecutable() -> URL? {
@@ -15,13 +21,31 @@ public struct SVNClient: Sendable {
             .map { URL(fileURLWithPath: $0) }
     }
 
+    /// 本机执行版本查询，不连接仓库；显式登录要求 SVN 1.14+。
+    public func version() async throws -> String {
+        let output = try await command(["--version", "--quiet"])
+        let version = output.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        let parts = version.split(separator: ".")
+        guard parts.count >= 2, let major = Int(parts[0]), let minor = Int(parts[1]) else {
+            throw SVNError("未识别到 SVN 版本，请检查所选文件。\n\(output.stdout)\(output.stderr)")
+        }
+        guard major > 1 || (major == 1 && minor >= 14) else {
+            throw SVNError("当前 SVN 版本为 \(version)，本应用需要 SVN 1.14 或更新版本。")
+        }
+        return version
+    }
+
     public func workingCopy(at directory: URL) async throws -> WorkingCopy {
         let output = try await command(["info", "--xml", "--", ".@"], in: directory)
         return try SVNXML.info(output.stdout)
     }
 
-    public func status(at directory: URL) async throws -> [StatusEntry] {
-        let output = try await command(["status", "--xml", "--ignore-externals", "--", ".@"], in: directory)
+    public func status(at directory: URL, includeIgnored: Bool = false) async throws -> [StatusEntry] {
+        var arguments = ["status", "--xml", "--ignore-externals"]
+        if includeIgnored {
+            arguments.append("--no-ignore")
+        }
+        let output = try await command(arguments + ["--", ".@"], in: directory)
         return try SVNXML.status(output.stdout)
     }
 
@@ -167,6 +191,10 @@ public struct SVNClient: Sendable {
         onOutput: (@Sendable (String) -> Void)? = nil
     ) async throws -> CommandOutput {
         var options = ["--non-interactive"]
+        if let globalIgnores {
+            let patterns = try SVNConfiguration.normalizeIgnorePatterns(globalIgnores)
+            options += ["--config-option", "config:miscellany:global-ignores=\(patterns)"]
+        }
         var input: Data?
         if let authentication {
             options += ["--no-auth-cache", "--username", authentication.username, "--password-from-stdin"]

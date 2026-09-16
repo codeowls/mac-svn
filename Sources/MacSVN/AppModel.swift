@@ -36,6 +36,8 @@ final class AppModel: ObservableObject {
         UserDefaults.standard.stringArray(forKey: "recentRepositoryURLs") ?? []
     @Published var executablePath: String = UserDefaults.standard.string(forKey: "svnExecutable")
         ?? SVNClient.discoverExecutable()?.path ?? ""
+    @Published private(set) var globalIgnores: String? = UserDefaults.standard.string(forKey: "svnGlobalIgnores")
+    @Published var showIgnored = false
     @Published var showHistory = false
     @Published private(set) var checkoutProgress: CheckoutProgress?
     @Published private(set) var authenticationStore = SVNAuthenticationStore()
@@ -60,7 +62,11 @@ final class AppModel: ObservableObject {
         let authentication = (repository ?? workingCopy?.repositoryURL).flatMap {
             authenticationStore.authentication(for: $0)
         }
-        return SVNClient(executable: URL(fileURLWithPath: executablePath), authentication: authentication)
+        return SVNClient(
+            executable: URL(fileURLWithPath: executablePath),
+            authentication: authentication,
+            globalIgnores: globalIgnores
+        )
     }
 
     /// 登录仅做远端读取验证，成功后按仓库根路径保存会话，不自动重试写操作。
@@ -76,7 +82,7 @@ final class AppModel: ObservableObject {
         let executable = try client(for: repository).executable
         isAuthenticating = true
         defer { isAuthenticating = false }
-        let client = SVNClient(executable: executable, authentication: authentication)
+        let client = SVNClient(executable: executable, authentication: authentication, globalIgnores: globalIgnores)
         let location = try await client.repositoryLocation(repository)
         try Task.checkCancellation()
         authenticationStore.set(authentication, for: location.rootURL)
@@ -99,7 +105,7 @@ final class AppModel: ObservableObject {
         perform("读取工作副本") {
             let client = try self.client()
             let copy = try await client.workingCopy(at: directory)
-            let entries = try await client.status(at: copy.root)
+            let entries = try await client.status(at: copy.root, includeIgnored: self.showIgnored)
             self.diffTask?.cancel()
             self.workingCopy = copy
             self.entries = entries
@@ -137,7 +143,15 @@ final class AppModel: ObservableObject {
         guard let copy = workingCopy, canAdd else { return }
         let paths = selectedPaths.sorted()
         perform("添加选中项目", refreshAfterFailure: true) {
-            self.result = try await self.client().add(paths: paths, at: copy.root)
+            let client = try self.client()
+            // SVN 会添加被显式指定的忽略项目；界面旧选择不能绕过当前规则。
+            let current = try await client.status(at: copy.root)
+            for path in paths {
+                guard current.contains(where: { $0.path == path && $0.item == "unversioned" }) else {
+                    throw SVNError("\(path) 已被忽略或状态已变化，请刷新后重新选择。")
+                }
+            }
+            self.result = try await client.add(paths: paths, at: copy.root)
             try await self.reload()
         }
     }
@@ -263,6 +277,10 @@ final class AppModel: ObservableObject {
             diffText = "此项目存在于本地，但尚未纳入 SVN 版本控制，没有可比较的仓库基准版本。\n\n需要提交时，先勾选并点击“添加到 SVN”；添加只安排版本控制，提交后才会上传。添加目录不会自动添加子文件。\n\n不需要提交的本地文件可以保留原状。"
             return
         }
+        if entry.item == "ignored" {
+            diffText = "此项目匹配 SVN 忽略规则，未纳入版本控制，不会列入添加或提交候选。\n\n规则可能来自本应用的全局忽略设置、系统 SVN 配置或目录忽略属性。需要添加时，请先调整对应规则并刷新。已受版本控制的文件不受忽略规则影响。"
+            return
+        }
         if ["external", "missing", "obstructed", "incomplete"].contains(entry.item) {
             diffText = "\(entry.label)：\(path)\n\n当前状态无法展示文本差异，请先检查工作副本；外部工作副本需单独打开。"
             return
@@ -282,8 +300,25 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func saveSettings() {
-        UserDefaults.standard.set(executablePath, forKey: "svnExecutable")
+    /// 配置保存后统一用于所有新命令，并刷新状态以清除已经被忽略的旧选择。
+    func saveSettings(executablePath: String, globalIgnores: String?) throws {
+        guard !isBusy else {
+            throw SVNError("请等待当前操作完成后再保存设置。")
+        }
+        let executable = try SVNConfiguration.executableURL(for: executablePath)
+        let patterns = try globalIgnores.map(SVNConfiguration.normalizeIgnorePatterns)
+        self.executablePath = executable.path
+        self.globalIgnores = patterns
+        UserDefaults.standard.set(executable.path, forKey: "svnExecutable")
+        if let patterns {
+            UserDefaults.standard.set(patterns, forKey: "svnGlobalIgnores")
+        } else {
+            UserDefaults.standard.removeObject(forKey: "svnGlobalIgnores")
+        }
+        selectedPaths = []
+        if workingCopy != nil {
+            refresh()
+        }
     }
 
     func cancel() {
@@ -337,11 +372,11 @@ final class AppModel: ObservableObject {
     private func reload() async throws {
         guard let copy = workingCopy else { return }
         let client = try client()
-        let newEntries = try await client.status(at: copy.root)
+        let newEntries = try await client.status(at: copy.root, includeIgnored: showIgnored)
         let newInfo = try await client.workingCopy(at: copy.root)
         entries = newEntries
         workingCopy = newInfo
-        selectedPaths.formIntersection(Set(entries.map(\.path)))
+        selectedPaths.formIntersection(Set(entries.filter { $0.canCommit || $0.item == "unversioned" }.map(\.path)))
         resetHistory()
         loadDiff()
     }
