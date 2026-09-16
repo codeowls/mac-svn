@@ -219,10 +219,30 @@ final class AppModel: ObservableObject {
         operationTask?.cancel()
     }
 
-    /// 仅移除最近记录，保留磁盘文件及当前已打开的工作副本。
+    /// 移除记录时同步关闭对应工作区；磁盘文件保持不变。
     func removeRecentPath(_ path: String) {
+        guard !isBusy else { return }
         recentPaths.removeAll { $0 == path }
         UserDefaults.standard.set(recentPaths, forKey: "workingCopies")
+        if workingCopy?.root.path == path || recentPaths.isEmpty {
+            closeWorkingCopy()
+        }
+    }
+
+    /// 清空副本相关状态，并阻止尚未完成的差异请求重新填充界面。
+    private func closeWorkingCopy() {
+        diffTask?.cancel()
+        diffTask = nil
+        workingCopy = nil
+        entries = []
+        selectedPaths = []
+        focusedPath = nil
+        diffText = "选择一个文件查看差异"
+        logs = []
+        message = ""
+        showHistory = false
+        errorMessage = nil
+        result = "欢迎使用 Mac SVN"
     }
 
     private func remember(_ root: URL) {

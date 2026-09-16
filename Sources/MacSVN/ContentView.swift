@@ -66,6 +66,13 @@ struct ContentView: View {
             Text(model.errorMessage ?? "")
         }
         .onChange(of: model.focusedPath) { _, _ in model.loadDiff() }
+        .onChange(of: model.workingCopy?.root) { _, root in
+            if root == nil {
+                filter = ""
+                showCommit = false
+                showOutput = false
+            }
+        }
         .onChange(of: model.checkoutProgress?.startedAt) { _, startedAt in
             if startedAt != nil {
                 showOutput = true
@@ -125,6 +132,7 @@ struct ContentView: View {
                                 Button("删除", role: .destructive) {
                                     model.removeRecentPath(path)
                                 }
+                                .disabled(model.isBusy)
                                 .help("仅从最近列表删除，不删除本地文件")
                             }
                         }
