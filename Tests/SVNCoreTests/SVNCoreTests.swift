@@ -152,6 +152,36 @@ struct IntegrationTests {
         }
     }
 
+    @Test func checkoutIntoExistingEmptyDirectoryAndRejectOccupiedTargets() async throws {
+        let f = try await Fixture.create()
+        try f.write("README.txt", "repository content\n")
+        _ = try await f.client.add(paths: ["README.txt"], at: f.first)
+        _ = try await f.client.commit(paths: ["README.txt"], message: "初始化检出内容", at: f.first)
+
+        let destination = f.root.appendingPathComponent("existing empty folder")
+        try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: false)
+        _ = try await f.client.checkout(repository: f.repository.absoluteString, destination: destination)
+        #expect(try String(contentsOf: destination.appendingPathComponent("README.txt"), encoding: .utf8)
+            == "repository content\n")
+        let copy = try await f.client.workingCopy(at: destination)
+        #expect(copy.root.resolvingSymlinksInPath() == destination.resolvingSymlinksInPath())
+
+        let occupied = f.root.appendingPathComponent("occupied")
+        try FileManager.default.createDirectory(at: occupied, withIntermediateDirectories: false)
+        try f.write(".keep", "local content", in: occupied)
+        await #expect(throws: (any Error).self) {
+            try await f.client.checkout(repository: f.repository.absoluteString, destination: occupied)
+        }
+        #expect(try String(contentsOf: occupied.appendingPathComponent(".keep"), encoding: .utf8) == "local content")
+        #expect(try FileManager.default.contentsOfDirectory(atPath: occupied.path) == [".keep"])
+
+        let file = occupied.appendingPathComponent(".keep")
+        await #expect(throws: (any Error).self) {
+            try await f.client.checkout(repository: f.repository.absoluteString, destination: file)
+        }
+        #expect(try String(contentsOf: file, encoding: .utf8) == "local content")
+    }
+
     @Test func copiedDirectoryCannotImplicitlyCommitChildren() async throws {
         let f = try await Fixture.create()
         try FileManager.default.createDirectory(at: f.first.appendingPathComponent("source"), withIntermediateDirectories: false)

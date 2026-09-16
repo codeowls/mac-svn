@@ -96,26 +96,39 @@ struct ContentView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 4) {
                         ForEach(model.recentPaths, id: \.self) { path in
-                            Button {
-                                filter = ""
-                                model.open(URL(fileURLWithPath: path))
-                            } label: {
-                                HStack(alignment: .top, spacing: 10) {
-                                    Image(systemName: "folder").foregroundStyle(.secondary).padding(.top, 2)
-                                    VStack(alignment: .leading, spacing: 5) {
-                                        Text(URL(fileURLWithPath: path).lastPathComponent)
-                                            .font(.body.weight(.medium)).lineLimit(1)
-                                        Text(path).font(.caption2).foregroundStyle(.secondary)
-                                            .lineLimit(1).truncationMode(.middle)
+                            HStack(spacing: 4) {
+                                Button {
+                                    filter = ""
+                                    model.open(URL(fileURLWithPath: path))
+                                } label: {
+                                    HStack(alignment: .top, spacing: 10) {
+                                        Image(systemName: "folder").foregroundStyle(.secondary).padding(.top, 2)
+                                        VStack(alignment: .leading, spacing: 5) {
+                                            Text(URL(fileURLWithPath: path).lastPathComponent)
+                                                .font(.body.weight(.medium)).lineLimit(1)
+                                            Text(path).font(.caption2).foregroundStyle(.secondary)
+                                                .lineLimit(1).truncationMode(.middle)
+                                        }
+                                        Spacer(minLength: 0)
                                     }
-                                    Spacer(minLength: 0)
+                                    .padding(10).frame(maxWidth: .infinity, alignment: .leading)
+                                    .contentShape(Rectangle())
                                 }
-                                .padding(10).frame(maxWidth: .infinity, alignment: .leading)
-                                .background(model.workingCopy?.root.path == path ? Color.primary.opacity(0.08) : .clear,
-                                            in: RoundedRectangle(cornerRadius: 10))
-                                .contentShape(Rectangle())
+                                .buttonStyle(.plain).help(path).disabled(model.isBusy)
+                                Button {
+                                    model.removeRecentPath(path)
+                                } label: {
+                                    Image(systemName: "xmark")
+                                        .font(.caption).foregroundStyle(.secondary)
+                                        .padding(6).contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                                .help("从最近列表移除，不删除本地文件")
+                                .accessibilityLabel("从最近列表移除 \(path)")
+                                .padding(.trailing, 6)
                             }
-                            .buttonStyle(.plain).help(path).disabled(model.isBusy)
+                            .background(model.workingCopy?.root.path == path ? Color.primary.opacity(0.08) : .clear,
+                                        in: RoundedRectangle(cornerRadius: 10))
                         }
                     }
                 }

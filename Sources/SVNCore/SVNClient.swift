@@ -48,8 +48,15 @@ public struct SVNClient: Sendable {
     /// 递归检出当前仓库目录的全部内容，外部引用仍由用户单独管理。
     public func checkout(repository: String, destination: URL) async throws -> String {
         let target = try Self.repositoryTarget(repository)
-        guard !FileManager.default.fileExists(atPath: destination.path) else {
-            throw SVNError("检出目标已存在，请选择一个新的目录名称。")
+        let fileManager = FileManager.default
+        var isDirectory: ObjCBool = false
+        if fileManager.fileExists(atPath: destination.path, isDirectory: &isDirectory) {
+            guard isDirectory.boolValue else {
+                throw SVNError("检出目标不是文件夹，请选择或新建一个空文件夹。")
+            }
+            guard try fileManager.contentsOfDirectory(atPath: destination.path).isEmpty else {
+                throw SVNError("检出目标文件夹不为空，请选择或新建一个空文件夹；已有工作副本请直接打开。")
+            }
         }
         let output = try await command([
             "checkout", "--depth", "infinity", "--ignore-externals", "--", target, destination.path

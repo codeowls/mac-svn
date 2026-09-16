@@ -174,6 +174,12 @@ final class AppModel: ObservableObject {
         operationTask?.cancel()
     }
 
+    /// 仅移除最近记录，保留磁盘文件及当前已打开的工作副本。
+    func removeRecentPath(_ path: String) {
+        recentPaths.removeAll { $0 == path }
+        UserDefaults.standard.set(recentPaths, forKey: "workingCopies")
+    }
+
     private func remember(_ root: URL) {
         recentPaths = [root.path] + recentPaths.filter { $0 != root.path }
         recentPaths = Array(recentPaths.prefix(12))
