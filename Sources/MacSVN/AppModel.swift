@@ -103,35 +103,52 @@ final class AppModel: ObservableObject {
 
     func open(_ directory: URL) {
         perform("读取工作副本") {
-            let client = try self.client()
-            let copy = try await client.workingCopy(at: directory)
-            let entries = try await client.status(at: copy.root, includeIgnored: self.showIgnored)
-            self.diffTask?.cancel()
-            self.workingCopy = copy
-            self.entries = entries
-            self.selectedPaths = []
-            self.focusedPath = nil
-            self.diffText = "选择一个文件查看差异"
-            self.resetHistory()
-            self.message = ""
-            self.showHistory = false
-            self.remember(copy.root)
-            self.rememberRepository(copy.repositoryURL)
-            self.result = "已打开 \(copy.root.lastPathComponent)，\(entries.count) 项状态记录"
+            let copy = try await self.readWorkingCopy(at: directory)
+            self.result = "已打开 \(copy.root.lastPathComponent)，\(self.entries.count) 项状态记录"
         }
     }
 
-    func refresh() {
+    /// 副本切换及右键操作共用同一读取流程，成功读取后才替换当前工作区。
+    private func readWorkingCopy(at directory: URL) async throws -> WorkingCopy {
+        let client = try client()
+        let copy = try await client.workingCopy(at: directory)
+        let entries = try await client.status(at: copy.root, includeIgnored: showIgnored)
+        diffTask?.cancel()
+        workingCopy = copy
+        self.entries = entries
+        selectedPaths = []
+        focusedPath = nil
+        diffText = "选择一个文件查看差异"
+        resetHistory()
+        message = ""
+        showHistory = false
+        remember(copy.root)
+        rememberRepository(copy.repositoryURL)
+        return copy
+    }
+
+    func refresh(at directory: URL? = nil) {
+        guard let directory = directory ?? workingCopy?.root else { return }
         perform("刷新本地状态") {
-            try await self.reload()
+            if self.workingCopy?.root == directory {
+                try await self.reload()
+            } else {
+                _ = try await self.readWorkingCopy(at: directory)
+            }
             self.result = "本地状态已刷新"
         }
     }
 
-    func update() {
-        guard let copy = workingCopy else { return }
+    func update(at directory: URL? = nil) {
+        guard let directory = directory ?? workingCopy?.root else { return }
         perform("更新工作副本", refreshAfterFailure: true) {
-            self.result = try await self.client().update(at: copy.root)
+            let copy: WorkingCopy
+            if let current = self.workingCopy, current.root == directory {
+                copy = current
+            } else {
+                copy = try await self.readWorkingCopy(at: directory)
+            }
+            self.result = try await self.client(for: copy.repositoryURL).update(at: copy.root)
             try await self.reload()
             if self.entries.contains(where: \.isConflict) {
                 self.result += "\n更新产生冲突，请检查标记为冲突的文件。首版请使用外部工具解决冲突。"

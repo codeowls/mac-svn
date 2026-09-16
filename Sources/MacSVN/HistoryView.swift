@@ -9,6 +9,26 @@ struct HistoryView: View {
         model.logs.first { $0.revision == model.selectedHistoryRevision }
     }
 
+    private static let displayDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.timeZone = .autoupdatingCurrent
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        return formatter
+    }()
+
+    /// SVN 返回 UTC 时间，转换为本机时区并隐藏小数秒与时区标记。
+    private func formattedDate(_ value: String) -> String {
+        guard !value.isEmpty else { return "（未提供时间）" }
+        do {
+            let date = try Date(value, strategy: Date.ISO8601FormatStyle(includingFractionalSeconds: value.contains(".")))
+            return Self.displayDateFormatter.string(from: date)
+        } catch {
+            return "时间格式无效：\(value)"
+        }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             HStack {
@@ -61,7 +81,7 @@ struct HistoryView: View {
                         }
                         Text(log.message.isEmpty ? "（无提交说明）" : log.message)
                             .lineLimit(3)
-                        Text(log.date).font(.caption).foregroundStyle(.secondary)
+                        Text(formattedDate(log.date)).font(.caption).foregroundStyle(.secondary)
                     }
                     .padding(.vertical, 8)
                     .tag(log.revision)
@@ -96,11 +116,6 @@ struct HistoryView: View {
                     LazyVStack(alignment: .leading, spacing: 0) {
                         ForEach(log.changedPaths) { change in
                             HStack(alignment: .top, spacing: 10) {
-                                Text(change.action)
-                                    .font(.system(.caption, design: .monospaced).weight(.semibold))
-                                    .foregroundStyle(actionColor(change))
-                                    .frame(width: 24, height: 24)
-                                    .background(actionColor(change).opacity(0.1), in: RoundedRectangle(cornerRadius: 5))
                                 Image(systemName: change.kind == "dir" ? "folder" : "doc.text")
                                     .foregroundStyle(.secondary).padding(.top, 4)
                                 VStack(alignment: .leading, spacing: 5) {

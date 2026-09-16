@@ -54,27 +54,27 @@ struct ContentView: View {
                 Button { model.chooseWorkingCopy() } label: {
                     Label("打开", systemImage: "folder")
                 }
-                .help("打开本机已有的 SVN 工作副本")
+                .quickHelp("打开本地工作副本")
                 .disabled(model.isBusy)
                 Button { showCheckout = true } label: {
                     Label("检出远端", systemImage: "square.and.arrow.down")
                 }
-                .help("从远端仓库检出文件到本机")
+                .quickHelp("检出远端仓库到本机")
                 .disabled(model.isBusy)
                 Button { model.refresh() } label: {
                     Label("刷新", systemImage: "arrow.clockwise")
                 }
-                .help("重新读取本地文件状态，不从服务器下载更新")
+                .quickHelp("刷新：重新读取本地状态")
                 .disabled(model.isBusy || model.workingCopy == nil)
                 Button { showLogin = true } label: {
                     Label("仓库账号", systemImage: "person.crop.circle")
                 }
-                .help("登录或切换当前仓库的 SVN 账号")
+                .quickHelp("登录或切换当前仓库账号")
                 .disabled(model.isBusy || model.workingCopy == nil)
                 Button { model.update() } label: {
                     Label("更新", systemImage: "arrow.down.circle")
                 }
-                .help("从服务器获取最新版本并更新当前工作副本")
+                .quickHelp("更新：从服务器获取最新版本")
                 .disabled(model.isBusy || model.workingCopy == nil)
             }
         }
@@ -163,6 +163,21 @@ struct ContentView: View {
                             .background(model.workingCopy?.root.path == path ? Color.primary.opacity(0.08) : .clear,
                                         in: RoundedRectangle(cornerRadius: 10))
                             .contextMenu {
+                                Button {
+                                    filter = ""
+                                    model.refresh(at: URL(fileURLWithPath: path))
+                                } label: {
+                                    Label("刷新", systemImage: "arrow.clockwise")
+                                }
+                                .disabled(model.isBusy)
+                                Button {
+                                    filter = ""
+                                    model.update(at: URL(fileURLWithPath: path))
+                                } label: {
+                                    Label("更新", systemImage: "arrow.down.circle")
+                                }
+                                .disabled(model.isBusy)
+                                Divider()
                                 Button("删除", role: .destructive) {
                                     model.removeRecentPath(path)
                                 }
