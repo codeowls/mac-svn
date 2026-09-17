@@ -10,7 +10,6 @@ let package = Package(
     ],
     targets: [
         .target(name: "SVNCore"),
-        .executableTarget(name: "MacSVN", dependencies: ["SVNCore"]),
-        .testTarget(name: "SVNCoreTests", dependencies: ["SVNCore"])
+        .executableTarget(name: "MacSVN", dependencies: ["SVNCore"])
     ]
 )

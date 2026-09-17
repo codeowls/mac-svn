@@ -37,20 +37,19 @@ struct DiffContentView: View {
             header
             Divider()
             ScrollViewReader { proxy in
-                HStack(spacing: 12) {
-                    Picker("展示方式", selection: $sideBySide) {
-                        Text("统一").tag(false)
-                        Text("并排").tag(true)
-                    }
-                    .pickerStyle(.segmented)
-                    .frame(width: 150)
-                    .disabled(document.hunkIDs.isEmpty)
-                    if !document.hunkIDs.isEmpty {
+                if !document.hunkIDs.isEmpty {
+                    HStack(spacing: 12) {
+                        Picker("展示方式", selection: $sideBySide) {
+                            Text("统一").tag(false)
+                            Text("并排").tag(true)
+                        }
+                        .pickerStyle(.segmented)
+                        .frame(width: 150)
+                        .labelsHidden()
+                        .accessibilityLabel("展示方式")
                         Text("+\(document.additions)").foregroundStyle(.green)
                         Text("−\(document.deletions)").foregroundStyle(.red)
-                    }
-                    Spacer()
-                    if !document.hunkIDs.isEmpty {
+                        Spacer()
                         Text("\(hunkIndex + 1) / \(document.hunkIDs.count) 处变更")
                             .foregroundStyle(.secondary)
                         Button {
@@ -66,10 +65,10 @@ struct DiffContentView: View {
                         .disabled(hunkIndex == document.hunkIDs.count - 1)
                         .help("下一处变更")
                     }
+                    .font(.system(size: 12, design: .monospaced))
+                    .padding(12)
+                    Divider()
                 }
-                .font(.system(size: 12, design: .monospaced))
-                .padding(12)
-                Divider()
                 if sideBySide && !document.hunkIDs.isEmpty {
                     HStack {
                         Text(oldLabel).frame(maxWidth: .infinity, alignment: .leading)
@@ -83,10 +82,14 @@ struct DiffContentView: View {
                     let width = columnWidth(available: geometry.size.width)
                     if document.hunkIDs.isEmpty {
                         ScrollView {
-                            Text(text)
-                                .textSelection(.enabled)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(24)
+                            if document.containsBinaryNotice {
+                                binaryNotice
+                            } else {
+                                Text(text)
+                                    .textSelection(.enabled)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(24)
+                            }
                         }
                         .background(Color(nsColor: .textBackgroundColor))
                     } else {
@@ -141,9 +144,11 @@ struct DiffContentView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
-            Button("复制差异") {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(text, forType: .string)
+            if !document.containsBinaryNotice {
+                Button("复制差异") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(text, forType: .string)
+                }
             }
             if let fileURL {
                 Button("在 Finder 中显示") {
@@ -152,6 +157,44 @@ struct DiffContentView: View {
             }
         }
         .padding(16)
+    }
+
+    /// 二进制文件展示能力说明；原始输出仍可展开，包含 SVN 返回的属性变更。
+    private var binaryNotice: some View {
+        let isWord = ["doc", "docx", "docm", "dot", "dotx", "dotm"]
+            .contains((title as NSString).pathExtension.lowercased())
+        return VStack(alignment: .leading, spacing: 24) {
+            ContentUnavailableView {
+                Label(isWord ? "暂不支持 Word 内容对比" : "暂不支持此文件的内容对比",
+                      systemImage: "doc.richtext")
+            } description: {
+                Text(isWord
+                     ? "此 Word 文档以二进制形式存储，当前查看器无法展示正文、表格或格式的变化。这不代表两个版本内容相同。"
+                     : "此文件以二进制形式存储，当前查看器无法展示其内容变化。这不代表两个版本内容相同。")
+            }
+            VStack(alignment: .leading, spacing: 10) {
+                Text("原版本：\(oldLabel)")
+                Text("新版本：\(newLabel)")
+            }
+            .font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+            DisclosureGroup("技术详情（SVN 原始输出及属性变更）") {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text(text)
+                        .font(.system(.caption, design: .monospaced))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Button("复制诊断信息") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(text, forType: .string)
+                    }
+                }
+                .padding(.top, 12)
+            }
+            .font(.caption)
+        }
+        .frame(maxWidth: 680, alignment: .leading)
+        .padding(32)
+        .frame(maxWidth: .infinity)
     }
 
     private func updateDocument() {

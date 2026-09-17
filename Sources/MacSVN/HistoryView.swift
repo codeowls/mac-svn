@@ -5,6 +5,7 @@ struct HistoryView: View {
     @ObservedObject var model: AppModel
     let onLogin: () -> Void
     @ViewState private var diffRequest: HistoricalDiffRequest?
+    @ViewState private var hoveredPath: String?
 
     private var selectedLog: LogEntry? {
         model.filteredLogs.first { $0.revision == model.selectedHistoryRevision }
@@ -153,48 +154,56 @@ struct HistoryView: View {
     /// 路径沿用仓库返回的绝对路径；复制来源单独展示，不将复制加删除猜测为重命名。
     private func changedFiles(_ log: LogEntry) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("r\(log.revision) · 变更文件 \(log.changedPaths.count) 项").font(.headline)
-                Text(log.message.isEmpty ? "（无提交说明）" : log.message)
-                    .textSelection(.enabled).lineLimit(5).help(log.message)
-                Text("路径相对于仓库根目录，包含目录变更；仅显示服务器授权返回的项目。")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            .padding(16)
-            Divider()
             if log.changedPaths.isEmpty {
                 ContentUnavailableView("没有可显示的变更路径", systemImage: "doc", description: Text("该记录未返回路径明细，可能受到仓库路径权限限制。"))
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
                         ForEach(log.changedPaths) { change in
-                            HStack(alignment: .top, spacing: 10) {
-                                Image(systemName: change.kind == "dir" ? "folder" : "doc.text")
-                                    .foregroundStyle(.secondary).padding(.top, 4)
-                                VStack(alignment: .leading, spacing: 5) {
-                                    Text(change.path).font(.system(size: 12, design: .monospaced))
-                                        .textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
-                                    Text(change.label).font(.caption).foregroundStyle(actionColor(change))
-                                    if let source = change.copyFromPath {
-                                        Text("复制自 \(source)\(change.copyFromRevision.map { " @ r\($0)" } ?? "")")
-                                            .font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
-                                    }
+                            Button {
+                                guard let copy = model.workingCopy else { return }
+                                do {
+                                    diffRequest = HistoricalDiffRequest(
+                                        change: change, revision: log.revision, directory: copy.root,
+                                        client: try model.client(for: copy.repositoryURL)
+                                    )
+                                } catch {
+                                    model.errorMessage = error.localizedDescription
                                 }
-                                Spacer(minLength: 0)
-                                Button("查看差异") {
-                                    guard let copy = model.workingCopy else { return }
-                                    do {
-                                        diffRequest = HistoricalDiffRequest(
-                                            change: change, revision: log.revision, directory: copy.root,
-                                            client: try model.client(for: copy.repositoryURL)
-                                        )
-                                    } catch {
-                                        model.errorMessage = error.localizedDescription
+                            } label: {
+                                HStack(alignment: .top, spacing: 10) {
+                                    Image(systemName: change.kind == "dir" ? "folder" : "doc.text")
+                                        .foregroundStyle(.secondary).padding(.top, 4)
+                                    VStack(alignment: .leading, spacing: 5) {
+                                        Text(change.path)
+                                            .font(.system(size: 12, design: .monospaced))
+                                            .multilineTextAlignment(.leading)
+                                            .fixedSize(horizontal: false, vertical: true)
+                                        Text(change.label).font(.caption).foregroundStyle(actionColor(change))
+                                        if let source = change.copyFromPath {
+                                            Text("复制自 \(source)\(change.copyFromRevision.map { " @ r\($0)" } ?? "")")
+                                                .font(.caption).foregroundStyle(.secondary)
+                                                .multilineTextAlignment(.leading)
+                                        }
                                     }
+                                    Spacer(minLength: 0)
+                                    Image(systemName: "chevron.right")
+                                        .font(.caption).foregroundStyle(.secondary)
+                                        .padding(.top, 4).accessibilityHidden(true)
                                 }
-                                .disabled(model.isBusy)
+                                .padding(12)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                // 让图标、文字、行内留白和箭头共享同一点击区域。
+                                .contentShape(Rectangle())
                             }
-                            .padding(12)
+                            .buttonStyle(.plain)
+                            .disabled(model.isBusy)
+                            .background(hoveredPath == change.path && !model.isBusy ? Color.primary.opacity(0.05) : .clear)
+                            .onHover { entered in
+                                hoveredPath = entered ? change.path : nil
+                            }
+                            .help("点击此行查看差异")
+                            .accessibilityHint("查看该路径在此次提交中的差异")
                             Divider()
                         }
                     }

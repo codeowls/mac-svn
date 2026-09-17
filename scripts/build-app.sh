@@ -2,7 +2,13 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
-swift build -c release
+MACOS_SDK_PATH="$(xcrun --sdk macosx --show-sdk-path)"
+MACOS_SDK_VERSION="$(xcrun --sdk macosx --show-sdk-version)"
+# Keep the linked SDK distinct from the macOS 14 deployment target in Package.swift.
+# SwiftPM with Command Line Tools can otherwise mark both as 14 and retain legacy UI.
+swift build -c release --sdk "$MACOS_SDK_PATH" \
+    -Xlinker -platform_version -Xlinker macos \
+    -Xlinker 14.0 -Xlinker "$MACOS_SDK_VERSION"
 bash scripts/build-icon.sh
 
 APP_DIR="$PWD/dist/Mac SVN.app"

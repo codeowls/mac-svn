@@ -1,12 +1,42 @@
 # Mac SVN
 
-一个使用 SwiftUI 开发的 macOS 原生 SVN 客户端。当前为 **0.2.0 私有开发预览版**，先完成日常变更审阅和提交流程，成熟后再考虑公开仓库。
+[简体中文](#简体中文) · [English](#english) · [MIT License](LICENSE)
+
+A native macOS Subversion client built with SwiftUI. Review changes, browse history, and commit selected files.
+
+使用 SwiftUI 构建的 macOS 原生 SVN 客户端，让日常变更审阅、历史查询和选择性提交更直观。
+
+## 界面预览 / Screenshots
+
+以下为原应用的真实截图，仅使用本地演示仓库和 `demo` 作者；包含私人工作副本的侧栏已隐藏，未展示业务地址、账号或个人目录。应用界面目前为简体中文。
+
+Real screenshots of the app using a local demo repository and the author `demo`. The sidebar containing private working copies is hidden; no business server addresses, accounts, or personal directories are shown. The app UI is currently in Simplified Chinese.
+
+### 欢迎页 / Welcome
+
+![欢迎页 / Welcome](assets/screenshots/welcome.jpg)
+
+### 工作区与选择性提交 / Working copy and selective commits
+
+![工作区 / Working copy](assets/screenshots/working-copy.jpg)
+
+### 并排差异 / Side-by-side diff
+
+![并排差异 / Side-by-side diff](assets/screenshots/diff.jpg)
+
+### 提交历史 / Revision history
+
+![提交历史 / Revision history](assets/screenshots/history.jpg)
+
+## 简体中文
+
+当前版本为 **0.2.0 开发预览版**，面向日常 SVN 工作副本管理。源码采用 MIT 协议；应用尚未完成正式签名、公证和跨设备兼容性验证。
 
 ## 运行要求
 
 - macOS 14 或更新版本；当前在 Apple Silicon 上开发验证。
 - Swift 6+ / 对应的 Xcode Command Line Tools。
-- 本机 Subversion 1.14+，开发与测试还需要同目录下的 `svnadmin`。
+- 本机 Subversion 1.14+，创建本地演示仓库还需要 `svnadmin`。
 
 ```bash
 brew install subversion
@@ -28,12 +58,14 @@ open "dist/Mac SVN.app"
 
 打包的 App 已声明简体中文，系统文件选择器会使用中文侧栏和按钮，不修改系统语言偏好。
 
+工具栏和分栏使用系统原生外观。要采用 Liquid Glass，请使用包含 macOS 26 或更新 SDK 的工具链打包，并在 macOS 26 或更新系统运行；最低运行要求仍为 macOS 14。打包脚本会将实际 SDK 版本写入链接信息，避免被误标为最低系统版本。当前 CI 使用 Xcode 16.4，仅验证原有系统兼容构建，不代表 Liquid Glass 外观验收。
+
 ## 当前功能
 
 - 设置中支持选择 SVN 可执行文件、自动检测常见安装位置及测试版本；保存前检查 SVN 1.14+，编辑草稿不会提前改变当前配置。
 - 切换工作副本时，在当前 App 会话内分别保留提交说明、路径筛选、已选项目、显示忽略项开关及历史查询范围／筛选；返回副本时重新核对状态，已提交或已忽略项目不会恢复为选中。提交成功清空对应草稿，移除最近记录会丢弃该副本草稿，退出 App 后草稿不保留。
 - 支持仅对本应用生效的全局忽略列表，保存后刷新当前副本并在重启后保留；可切回系统 SVN 配置。状态列表支持显示已忽略项，忽略项不能勾选添加或提交。
-- 打开已有工作副本，保存最近打开记录；已有记录切换时保持原位，新副本加入顶部；右键记录并选择“删除”可从列表移除，重启后仍生效，不删除磁盘文件。移除当前副本或清空列表时，清空工作区并返回欢迎页；移除其他记录不影响当前工作区。从子目录打开时定位到工作副本根目录。
+- 打开已有工作副本，保存最近打开记录；已有记录切换时保持原位，新副本加入顶部；右键记录并选择“删除…”后，弹窗显示完整路径；确认“移除记录”才从列表移除，取消不改变记录。移除结果在重启后仍生效，不删除磁盘文件。移除当前副本或清空列表时，清空工作区并返回欢迎页；移除其他记录不影响当前工作区。从子目录打开时定位到工作副本根目录。
 - 直接输入远端分支 URL 检出，或逐层浏览仓库目录、进入所需分支后检出到新目录；支持标准及自定义分支布局。
 - 仓库地址输入框旁支持历史下拉选择；成功登录、浏览、检出或打开工作副本后保存地址，去重并保留最近 12 项。重新打开检出窗口默认填入最近地址，重启 App 后仍保留。
 - 在检出窗口或工具栏的“仓库账号”中输入账号、密码，验证通过后用于该仓库的浏览、检出、更新、历史和提交；支持切换账号，密码只保留在当前 App 会话。
@@ -46,7 +78,7 @@ open "dist/Mac SVN.app"
 - 选中项目后可还原，执行前展示目标、实际差异及影响，明确确认后才丢弃修改。确认时重新核对状态、属性和内容（含二进制），发生变化则拒绝执行；还原后重新读取状态。普通新增文件撤销新增安排但保留本地内容，带历史复制文件会被删除。
 - 分页查看提交历史，每次加载 50 条，可继续加载更早记录；按作者、提交说明和变更路径组合筛选，明确仅筛选已加载记录。续读失败或取消时保留已有记录，可重试。
 - 支持在历史页选择已提交的文件，或右键本地变更项查看该路径历史；可返回工作副本历史，重载及登录重试保持当前查询范围。选中提交后显示该次提交的变更文件／目录列表，区分新增、修改、删除、替换和复制来源。路径按仓库根目录显示，以服务器返回的授权范围为准。
-- 历史变更列表的“查看差异”可读取对应提交的文件／目录属性变化，标注两端路径与版本；新增、删除、替换按前后版本比较，新增复制按复制来源版本比较。复用统一／并排视图，保留二进制提示，读取失败可重试；不会使用或改动本地未提交内容。
+- 点击历史变更列表中的文件／目录整行可查看对应提交的差异；行尾箭头及悬停高亮提示可点击，标注两端路径与版本；新增、删除、替换按前后版本比较，新增复制按复制来源版本比较。复用统一／并排视图；Word 等二进制文件显示中文能力提示，隐藏无效的展示切换，原始诊断及属性变更可在“技术详情”中展开。读取失败可重试；不会使用或改动本地未提交内容。
 - 历史读取失败与空历史分别显示；认证失败可直接登录仓库，登录成功后重新读取历史。工作区标题显示当前仓库的 App 登录账号；未登录时仍允许使用本机 SVN 已有认证配置。
 - 查看操作输出和错误信息，原始历史查询诊断保留在操作输出中；支持中断进行中的命令。
 - 检出时自动展开实时日志，显示已完成项目数（文件/目录）、最近完成路径及耗时；等待新输出时明确提示。大文件传输期间 SVN 可能暂时没有新通知，不显示推算百分比。失败显示 SVN 原始错误和输出，取消保留已收到的日志。
@@ -97,31 +129,124 @@ bash scripts/create-demo.sh
 - Diff 基于 SVN 统一差异按行展示，尚不包含语法或词内高亮，也不提供冲突合并编辑；超大文件的解析和渲染仍需专项验证。
 - 最近目录与 SVN 可执行文件设置保存在本机 UserDefaults，不进入代码仓库。
 
-## 测试
+## 构建检查
 
 ```bash
-swift test --enable-swift-testing
+swift build
 ```
 
-如果当前 Command Line Tools 报 `TestingMacros` 插件未加载，可显式加载本机随工具链提供的插件：
-
-```bash
-swift test --enable-swift-testing \
-  -Xswiftc -load-plugin-library \
-  -Xswiftc /Library/Developer/CommandLineTools/usr/lib/swift/host/plugins/testing/libTestingMacros.dylib
-```
-
-测试使用 `svnadmin` 创建隔离的本地 `file://` 仓库，覆盖两个工作副本之间的检出、更新、选择性提交、目录属性、中文/空格/@/前导连字符文件名、冲突拒绝、XML 解析、子进程取消、退出前实时输出、跨读取边界的中文 UTF-8 和双管道持续排空；另覆盖分支目录浏览、中文及 @ 分支 URL、仅检出选中分支、直接检出到已有空文件夹、拒绝非空目录和普通文件目标、多层目录及空目录的递归检出、忽略 externals、无效 URL 和远端目录错误。认证测试另启动仅监听本机随机端口的独立 svnserve，覆盖错误密码、账号隔离、带密码的检出与提交、只读账号拒绝和不缓存密码；进程结束后关闭该测试服务。另覆盖目录忽略的名称转义、目录范围、属性保存与撤销、并发修改拒绝及目录属性提交共享。测试不访问业务仓库，产生的临时目录以 `mac-svn-tests-` 或 `mac-svn-auth-` 开头，为便于排障保留，不自动删除。
-
-CI 配置位于 `.github/workflows/ci.yml`，在 macOS 15 / Xcode 16.4 上安装 SVN，运行隔离测试、Release 打包和本地签名检查。每次推送及 Pull Request 的检查结果见 GitHub Actions，工作流不包含发布步骤。
+CI 配置位于 `.github/workflows/ci.yml`，在 macOS 15 / Xcode 16.4 上安装 SVN，运行 Release 打包和本地签名检查。每次推送及 Pull Request 的检查结果见 GitHub Actions，工作流不包含发布步骤。当前仓库不包含自动测试。
 
 ## 代码结构
 
 ```text
 Sources/SVNCore/       SVN 进程执行、XML 解析、状态模型与业务操作
 Sources/MacSVN/        SwiftUI 界面与主线程状态管理
-Tests/SVNCoreTests/    解析与真实 SVN 集成测试
 scripts/build-app.sh  本地 .app 打包
 ```
 
-项目尚未选定开源许可证；公开前需要确定许可证和发布策略。
+## 开源协议
+
+本项目采用 [MIT License](LICENSE)，版权署名为 `codeowls`。分发时请保留许可证及版权声明。Subversion、Swift 和系统框架分别遵循各自的许可条款。
+
+---
+
+## English
+
+**Version 0.2.0 — development preview.** Mac SVN is a native SwiftUI client for everyday Subversion work. Source code is available under the MIT License. The app has not yet completed release signing, notarization, or cross-device compatibility validation.
+
+### Requirements
+
+- macOS 14 or later; developed and verified on Apple Silicon.
+- Swift 6+ with a compatible Xcode or Command Line Tools installation.
+- Subversion 1.14+ installed locally. `svnadmin` is also needed to create the optional demo repository.
+- The application interface is currently in Simplified Chinese; this README is bilingual.
+
+```bash
+brew install subversion
+swift run MacSVN
+```
+
+You can also open `Package.swift` in Xcode. Mac SVN checks `/opt/homebrew/bin/svn`, `/usr/local/bin/svn`, and `/usr/bin/svn`; a different executable can be selected in Settings.
+
+### Build the macOS app
+
+```bash
+bash scripts/build-app.sh
+open "dist/Mac SVN.app"
+```
+
+The script builds for the local architecture, embeds the app icon and language declarations, and applies an ad-hoc signature. It refreshes this app's Launch Services registration. Quit the previous app process before reopening the rebuilt bundle. Build artifacts are excluded from Git.
+
+This is a local development build, without Developer ID signing or Apple notarization. Running `swift run` starts a bare executable without the bundle's icon and language configuration.
+
+Liquid Glass appearance requires a macOS 26+ SDK and macOS 26+ at runtime; the minimum deployment target remains macOS 14. The build script records the actual linked SDK. CI uses Xcode 16.4 and checks the compatibility build, not Liquid Glass appearance.
+
+### Features
+
+- Open existing working copies or browse a remote repository and check out a selected branch into a new or empty directory. Existing nonempty directories are not overwritten; externals are excluded.
+- Keep recent working copies and repository addresses. Removing a recent entry requires confirmation and does not delete local files.
+- Review and filter local changes, including content, properties, missing files, and conflicts. Unversioned files are clearly distinguished from versioned changes.
+- Inspect unified or side-by-side text diffs with line numbers, change counts, and navigation between changed sections. Binary files, including Word documents, show an explicit limitation message with expandable original SVN diagnostics and property changes.
+- Add, revert, or commit only selected items. Commits are reviewed before execution; directories do not automatically include unselected children.
+- Review the actual changes before reverting. State and content are checked again at confirmation. Ordinary newly added files remain on disk after reverting their addition; files added with history may be deleted by SVN revert.
+- Browse history in pages of 50 revisions, filter loaded records by author, message, and path, and view history for an individual versioned path. Click a changed file or directory row to inspect its historical diff, including copy-source comparisons.
+- Stream real command output for checkout, update, and commit, with elapsed time and cancellation. Checkout progress reports received items rather than an estimated percentage.
+- Preserve commit messages, selections, filters, and history scope separately for each working copy during the current session. Selections are revalidated when returning to a working copy. Drafts are not persisted across app restarts.
+- Configure the SVN executable, app-specific global ignore patterns, and directory-level `svn:ignore` properties.
+
+### Typical workflow
+
+1. Choose **检出远端** (check out a remote repository) or **打开本地工作副本** (open a local working copy). A checkout URL may point directly to the branch you need.
+2. Click a changed file to review its diff, then select the files to operate on.
+3. Add unversioned files to SVN before committing. Include an uncommitted parent directory when committing a new child.
+4. Enter a commit message and choose **检查并提交** (review and commit).
+5. Use **刷新** (refresh) for local status, **更新** (update) to download repository changes, and **提交历史** (revision history) to inspect server history.
+
+SVN has no Git-style staging area. Checkboxes select targets for the next operation. Commits use `--depth empty`; directory deletion, replacement, and copies with history are currently refused because they may implicitly affect children.
+
+To explore safely with local sample files:
+
+```bash
+bash scripts/create-demo.sh
+```
+
+The script prints the working-copy path. Its sample data stays in a temporary directory and is not automatically deleted.
+
+### Ignore rules
+
+In Settings, choose the system SVN rules or enable app-specific global patterns. Patterns are separated by whitespace; Git-style negation and path rules are not supported. An explicitly empty custom list disables global patterns for this app, while directory and inherited SVN properties still apply. Settings do not rewrite `~/.subversion/config`.
+
+Directory rules are stored in `svn:ignore`, one name or pattern per line. They affect direct children only and become a directory property change that must be committed to share with others. The app checks for concurrent property changes before saving. Ignore rules never remove files or hide modifications to already versioned files.
+
+### Authentication and limitations
+
+- Session login supports `http://`, `https://`, and `svn://`. `file://` needs no login; `svn+ssh://` uses the system SSH setup. Successful login verifies read access; the server checks write permission during commit.
+- Passwords entered in the app stay in memory for the current session and are scoped to the authenticated repository root. They are passed through standard input using `--password-from-stdin`, with `--no-auth-cache`; they are not stored in UserDefaults or command-line arguments.
+- Without an app login, SVN uses its existing local authentication cache, proxy, and certificate configuration. Commands are noninteractive and do not silently trust certificates. URLs containing passwords are rejected.
+- Recent paths, repository addresses, and SVN settings are stored locally in UserDefaults. They are not part of this source repository.
+- There is no bundled SVN engine, Finder extension, three-way merge editor, rename/delete UI, sparse-checkout settings, or file-lock management yet.
+- Externals and nested working copies are managed separately. Revert does not currently support conflicts, move pairs, or deleted/missing/replaced/copied directories.
+- Writes are serialized within one window. Do not modify the same working copy concurrently from another client.
+- Cancellation does not roll back completed work. Failed or cancelled checkout can leave a partial directory. If a commit result is unclear, inspect repository history before retrying.
+- Text diffs do not yet include syntax highlighting, word-level highlighting, or conflict resolution. Large-workspace and large-diff performance needs further validation. Binary notices do not mean the versions are identical.
+
+### Build checks and layout
+
+```bash
+swift build
+```
+
+[GitHub Actions](.github/workflows/ci.yml) builds the Release app on macOS 15 / Xcode 16.4, verifies its local signature, and checks whitespace. It does not publish releases. Automated test sources are not included in the current repository.
+
+```text
+Sources/SVNCore/        SVN process execution, XML parsing, models, and operations
+Sources/MacSVN/         SwiftUI views and main-thread application state
+assets/screenshots/    Real app screenshots using local demo data
+scripts/build-app.sh   Local app bundle build
+scripts/create-demo.sh Local sample repository
+```
+
+### License
+
+Licensed under the [MIT License](LICENSE), copyright `codeowls`. Keep the license and copyright notice when redistributing. Subversion, Swift, and system frameworks remain subject to their respective licenses.

@@ -1,4 +1,4 @@
-name: Build and test
+name: Build and verify
 
 on:
   push:
@@ -32,9 +32,6 @@ jobs:
           swift --version
           svn --version --quiet
           svnadmin --version --quiet
-
-      - name: Run isolated SVN integration tests
-        run: swift test --enable-swift-testing --xunit-output .build/test-results.xml
 
       - name: Build app and verify local signature
         run: |

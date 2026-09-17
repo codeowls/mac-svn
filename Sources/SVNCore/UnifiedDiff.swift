@@ -27,6 +27,13 @@ public struct UnifiedDiff: Sendable {
     public var deletions: Int { lines.filter { $0.kind == .deletion }.count }
     public var hunkIDs: [Int] { lines.filter { $0.kind == .hunk }.map(\.id) }
 
+    /// 只识别 SVN 的二进制诊断，避免把正文中的同名文字误判为不支持对比。
+    public var containsBinaryNotice: Bool {
+        lines.contains {
+            $0.kind == .metadata && $0.text == "Cannot display: file marked as a binary type."
+        }
+    }
+
     public init(_ text: String) {
         let header = /@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/
         var oldNumber = 0

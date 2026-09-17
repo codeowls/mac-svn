@@ -9,6 +9,7 @@ struct ContentView: View {
     @ViewState private var showLogin = false
     @ViewState private var showDiff = false
     @ViewState private var showOutput = false
+    @ViewState private var recentPathPendingRemoval: String?
     @ViewState private var footerHeight: CGFloat = 44
 
     private let statusRowHeight: CGFloat = 44
@@ -77,7 +78,6 @@ struct ContentView: View {
                 .disabled(model.isBusy || model.workingCopy == nil)
             }
         }
-        .toolbarBackground(.hidden, for: .windowToolbar)
         .sheet(isPresented: $showCheckout) { CheckoutView(model: model) }
         .sheet(isPresented: $showCommit) { commitReview }
         .sheet(item: $model.directoryIgnoreDraft) { draft in
@@ -105,6 +105,20 @@ struct ContentView: View {
             Button("知道了", role: .cancel) { model.errorMessage = nil }
         } message: {
             Text(model.errorMessage ?? "")
+        }
+        .alert("从最近列表移除此工作副本？", isPresented: Binding(
+            get: { recentPathPendingRemoval != nil },
+            set: { if !$0 { recentPathPendingRemoval = nil } }
+        ), presenting: recentPathPendingRemoval) { path in
+            Button("取消", role: .cancel) { recentPathPendingRemoval = nil }
+            Button("移除记录", role: .destructive) {
+                // 使用弹窗展示的路径，避免确认时误操作其他副本。
+                model.removeRecentPath(path)
+                recentPathPendingRemoval = nil
+            }
+            .disabled(model.isBusy)
+        } message: { path in
+            Text("\(path)\n\n仅移除最近记录，不会删除本地文件。该副本的会话草稿将被清除；如果当前已打开，也会关闭其工作区。")
         }
         .onChange(of: model.focusedPath) { _, _ in model.loadDiff() }
         .onChange(of: model.workingCopy?.root) { _, root in
@@ -137,7 +151,6 @@ struct ContentView: View {
                         .frame(maxWidth: .infinity, alignment: .leading).padding(10)
                 }
                 .buttonStyle(.plain)
-                .background(Color.primary.opacity(0.07), in: RoundedRectangle(cornerRadius: 10))
                 Button { model.chooseWorkingCopy() } label: {
                     Label("打开本地工作副本", systemImage: "folder")
                         .frame(maxWidth: .infinity, alignment: .leading).padding(10)
@@ -184,8 +197,8 @@ struct ContentView: View {
                                 }
                                 .disabled(model.isBusy)
                                 Divider()
-                                Button("删除", role: .destructive) {
-                                    model.removeRecentPath(path)
+                                Button("删除…", role: .destructive) {
+                                    recentPathPendingRemoval = path
                                 }
                                 .disabled(model.isBusy)
                                 .help("仅从最近列表删除，不删除本地文件")
