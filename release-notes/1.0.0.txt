@@ -1,0 +1,23 @@
+Mac SVN 1.0.0
+
+下载与安装 / Download and install
+- macOS 14+，通用架构安装包（Apple Silicon / Intel）。
+- 推荐下载 Mac-SVN-1.0.0-universal.dmg，打开后将 Mac SVN.app 拖入 Applications。
+- 也可下载 ZIP 并解压，将 App 移入 Applications。无需安装 Swift 或 Xcode。
+- 需要本机 Subversion 1.14+；已安装 Homebrew 时运行 brew install subversion。
+- SHA256SUMS.txt 可用于校验下载文件：shasum -a 256 -c SHA256SUMS.txt。
+- 本版仅使用 ad-hoc 签名，尚无 Developer ID 签名和 Apple 公证；macOS 可能阻止首次打开。请核对来源后参考 https://support.apple.com/102445 ，无需关闭系统 Gatekeeper。
+- 已在 Apple Silicon 原应用验收；Intel 架构已构建，尚未进行 Intel 实机验收。
+
+主要功能
+- 检出和打开工作副本，选择性提交、还原、忽略规则与实时操作输出。
+- 提交历史、统一／并排差异、历史文件前后版本及复制来源导出。
+- 检出失败／取消后的目录检查和恢复入口，大量日志增量显示。
+- 内容冲突的版本查看、外部编辑、最终内容确认及标记解决；属性和树冲突仅提供详情。
+
+English
+Download the universal DMG, open it, and drag Mac SVN.app into Applications, or extract the ZIP. Requires macOS 14+ and a local Subversion 1.14+ installation; Swift/Xcode is not required. The app interface is Simplified Chinese.
+
+This release is ad-hoc signed and is not Developer ID signed or Apple notarized. macOS may block its first launch; verify the source and checksums, then follow Apple's instructions at https://support.apple.com/102445. Do not disable Gatekeeper system-wide. Apple Silicon runtime checks passed; Intel is built but has not been tested on physical Intel hardware.
+
+See README for features, requirements, and limitations: https://github.com/codeowls/mac-svn#english

@@ -1,0 +1,45 @@
+name: Publish release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: macos-15
+    timeout-minutes: 30
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_16.4.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate release version
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          test "$RELEASE_TAG" = "v$(cat VERSION)"
+          test -f "release-notes/$(cat VERSION).txt"
+      - name: Build and verify universal packages
+        run: bash scripts/package-release.sh
+      - name: Upload assets before publishing
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          VERSION="$(cat VERSION)"
+          gh release create "$RELEASE_TAG" --verify-tag --draft \
+            --title "Mac SVN $VERSION" --notes-file "release-notes/$VERSION.txt" \
+            "dist/releases/$VERSION/Mac-SVN-$VERSION-universal.dmg" \
+            "dist/releases/$VERSION/Mac-SVN-$VERSION-universal.zip" \
+            "dist/releases/$VERSION/SHA256SUMS.txt"
+          gh release edit "$RELEASE_TAG" --draft=false --latest

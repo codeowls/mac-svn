@@ -2,21 +2,33 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
+APP_VERSION="$(cat VERSION)"
+if [[ ! "$APP_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    printf 'Invalid VERSION: %s\n' "$APP_VERSION" >&2
+    exit 1
+fi
 MACOS_SDK_PATH="$(xcrun --sdk macosx --show-sdk-path)"
 MACOS_SDK_VERSION="$(xcrun --sdk macosx --show-sdk-version)"
+BUILD_ARGS=(-c release --sdk "$MACOS_SDK_PATH")
+case "${1:-}" in
+    "") ;;
+    --universal) BUILD_ARGS+=(--arch arm64 --arch x86_64) ;;
+    *) printf 'Usage: bash scripts/build-app.sh [--universal]\n' >&2; exit 1 ;;
+esac
 # Keep the linked SDK distinct from the macOS 14 deployment target in Package.swift.
 # SwiftPM with Command Line Tools can otherwise mark both as 14 and retain legacy UI.
-swift build -c release --sdk "$MACOS_SDK_PATH" \
+swift build "${BUILD_ARGS[@]}" \
     -Xlinker -platform_version -Xlinker macos \
     -Xlinker 14.0 -Xlinker "$MACOS_SDK_VERSION"
 bash scripts/build-icon.sh
 
 APP_DIR="$PWD/dist/Mac SVN.app"
 mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
-BIN_DIR="$(swift build -c release --show-bin-path)"
+BIN_DIR="$(swift build "${BUILD_ARGS[@]}" --show-bin-path)"
 cp "$BIN_DIR/MacSVN" "$APP_DIR/Contents/MacOS/MacSVN"
 cp "$PWD/assets/AppIcon.icns" "$APP_DIR/Contents/Resources/AppIcon.icns"
-cat > "$APP_DIR/Contents/Info.plist" <<'PLIST'
+cp "$PWD/LICENSE" "$APP_DIR/Contents/Resources/LICENSE"
+cat > "$APP_DIR/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -30,8 +42,8 @@ cat > "$APP_DIR/Contents/Info.plist" <<'PLIST'
     <key>CFBundleLocalizations</key>
     <array><string>zh-Hans</string></array>
     <key>CFBundlePackageType</key><string>APPL</string>
-    <key>CFBundleShortVersionString</key><string>0.2.0</string>
-    <key>CFBundleVersion</key><string>2</string>
+    <key>CFBundleShortVersionString</key><string>$APP_VERSION</string>
+    <key>CFBundleVersion</key><string>$APP_VERSION</string>
     <key>LSMinimumSystemVersion</key><string>14.0</string>
     <key>NSHighResolutionCapable</key><true/>
 </dict>

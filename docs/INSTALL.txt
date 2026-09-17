@@ -1,0 +1,22 @@
+Mac SVN — 安装 / Installation
+
+要求 macOS 14 或更新版本，支持 Apple Silicon 和 Intel。
+Requires macOS 14 or later. Supports Apple Silicon and Intel.
+
+1. 将 Mac SVN.app 拖入 Applications（应用程序）文件夹。
+   Drag Mac SVN.app into Applications.
+2. 本机需要 Subversion 1.14+。如已安装 Homebrew，可运行：
+   Install Subversion 1.14+. With Homebrew already installed, run:
+       brew install subversion
+3. 从应用程序文件夹启动 Mac SVN；如未检测到 SVN，请在设置中指定 svn 路径。
+   Launch Mac SVN from Applications. Select the svn executable in Settings if needed.
+
+本版采用 ad-hoc 签名，尚无 Developer ID 签名及 Apple 公证。
+This release is ad-hoc signed, without Developer ID signing or Apple notarization.
+macOS 可能阻止首次打开；请先核对下载来源与 SHA256 校验值，再按 Apple 指引处理：
+macOS may block the first launch. Verify the source and SHA256 checksums, then consult:
+https://support.apple.com/102445
+无需关闭系统 Gatekeeper。/ Do not disable Gatekeeper system-wide.
+
+下载与源码 / Downloads and source: https://github.com/codeowls/mac-svn
+许可证 / License: MIT (included in the app bundle)

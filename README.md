@@ -1,6 +1,6 @@
 # Mac SVN
 
-[简体中文](#简体中文) · [English](#english) · [MIT License](LICENSE)
+[简体中文](#简体中文) · [English](#english) · [MIT License](LICENSE) · [下载 / Download](https://github.com/codeowls/mac-svn/releases/latest)
 
 A native macOS Subversion client built with SwiftUI. Review changes, browse history, and commit selected files.
 
@@ -30,9 +30,21 @@ Real screenshots of the app using a local demo repository and the author `demo`.
 
 ## 简体中文
 
-当前版本为 **0.2.0 开发预览版**，面向日常 SVN 工作副本管理。源码采用 MIT 协议；应用尚未完成正式签名、公证和跨设备兼容性验证。
+当前版本为 **1.0.0**，面向日常 SVN 工作副本管理。源码采用 MIT 协议；应用尚未完成正式签名、公证和跨设备兼容性验证。
 
-## 运行要求
+## 下载与安装
+
+前往 [GitHub Releases](https://github.com/codeowls/mac-svn/releases/latest) 下载，或直接选择 **1.0.0** 安装包：
+
+- [DMG 安装包（推荐）](https://github.com/codeowls/mac-svn/releases/download/v1.0.0/Mac-SVN-1.0.0-universal.dmg)：打开后将 **Mac SVN.app** 拖入 **Applications（应用程序）**。
+- [ZIP 压缩包](https://github.com/codeowls/mac-svn/releases/download/v1.0.0/Mac-SVN-1.0.0-universal.zip)：解压后将 App 移入应用程序文件夹。
+- [SHA256 校验文件](https://github.com/codeowls/mac-svn/releases/download/v1.0.0/SHA256SUMS.txt)：与安装包放在同一目录，运行 `shasum -a 256 -c SHA256SUMS.txt`；只下载一种安装包时，另一项会提示文件缺失，请核对已下载项显示 `OK`。
+
+安装包要求 **macOS 14+**，同时包含 **Apple Silicon / Intel** 架构，无需安装 Swift 或 Xcode。已在 Apple Silicon 验收；Intel 已完成构建，尚未进行 Intel 实机验收。App 仍需本机 **Subversion 1.14+**；已安装 Homebrew 时运行 `brew install subversion`，启动后可在设置中检测或指定 SVN 路径。应用界面目前为简体中文。
+
+**签名说明：**本版为 ad-hoc 签名，尚无 Developer ID 签名和 Apple 公证，macOS 可能阻止首次打开。请先核对来源与校验值，再参考 [Apple 官方打开指引](https://support.apple.com/102445)。无需关闭系统 Gatekeeper。
+
+## 从源码运行
 
 - macOS 14 或更新版本；当前在 Apple Silicon 上开发验证。
 - Swift 6+ / 对应的 Xcode Command Line Tools。
@@ -52,7 +64,9 @@ bash scripts/build-app.sh
 open "dist/Mac SVN.app"
 ```
 
-生成的 App 使用本机架构，采用 ad-hoc 签名，供本机开发使用；尚未进行 Developer ID 签名和 Apple 公证，不是面向其他机器的正式发行包。构建产物不会提交到 Git。
+默认生成本机架构 App；使用 `bash scripts/build-app.sh --universal` 可生成通用架构。版本号统一读取 `VERSION`，采用 ad-hoc 签名，尚未进行 Developer ID 签名和 Apple 公证。构建产物不会提交到 Git。
+
+运行 `bash scripts/package-release.sh` 生成通用架构 DMG、ZIP 和 SHA256 校验文件，输出到 `dist/releases/1.0.0/`；已有同版本输出时拒绝覆盖。维护者更新 `VERSION` 及 `release-notes/<版本>.txt` 后推送对应 `v<版本>` 标签，发布工作流会校验标签、构建验证安装包、上传附件后公开 Release。
 
 打包时自动生成并嵌入原生 App 图标；源图和图标说明位于 [`assets/`](assets/README.md)。通过打包后的 `.app` 启动可使用该图标。打包脚本会刷新该 App 的 Launch Services 注册，启动时重新载入 Dock 图标；重建后请退出旧进程再打开 `dist/Mac SVN.app`。`swift run` 是裸可执行文件调试入口，不包含 `.app` 的图标和语言声明。
 
@@ -138,7 +152,7 @@ bash scripts/create-demo.sh
 swift build
 ```
 
-CI 配置位于 `.github/workflows/ci.yml`，在 macOS 15 / Xcode 16.4 上安装 SVN，运行 Release 打包和本地签名检查。每次推送及 Pull Request 的检查结果见 GitHub Actions，工作流不包含发布步骤。当前仓库不包含自动测试。
+CI 配置位于 `.github/workflows/ci.yml`，在 macOS 15 / Xcode 16.4 上安装 SVN，运行 Release 打包和本地签名检查。每次推送及 Pull Request 的检查结果见 GitHub Actions，日常 CI 不发布版本；`.github/workflows/release.yml` 仅在版本标签推送时生成并发布安装包。当前仓库不包含自动测试。
 
 ## 代码结构
 
@@ -156,9 +170,21 @@ scripts/build-app.sh  本地 .app 打包
 
 ## English
 
-**Version 0.2.0 — development preview.** Mac SVN is a native SwiftUI client for everyday Subversion work. Source code is available under the MIT License. The app has not yet completed release signing, notarization, or cross-device compatibility validation.
+**Version 1.0.0.** Mac SVN is a native SwiftUI client for everyday Subversion work. Source code is available under the MIT License. The app has not yet completed release signing, notarization, or cross-device compatibility validation.
 
-### Requirements
+### Download and install
+
+Visit [GitHub Releases](https://github.com/codeowls/mac-svn/releases/latest), or download **1.0.0** directly:
+
+- [DMG installer (recommended)](https://github.com/codeowls/mac-svn/releases/download/v1.0.0/Mac-SVN-1.0.0-universal.dmg): open it and drag **Mac SVN.app** into **Applications**.
+- [ZIP archive](https://github.com/codeowls/mac-svn/releases/download/v1.0.0/Mac-SVN-1.0.0-universal.zip): extract it and move the app into Applications.
+- [SHA256 checksums](https://github.com/codeowls/mac-svn/releases/download/v1.0.0/SHA256SUMS.txt): place beside the downloads and run `shasum -a 256 -c SHA256SUMS.txt`. If you downloaded only one package, the other will be reported missing; verify that your downloaded file shows `OK`.
+
+Requires **macOS 14+** and local **Subversion 1.14+**. Both **Apple Silicon and Intel** architectures are included; Swift/Xcode is not required. Apple Silicon runtime checks passed; Intel is built but has not been tested on physical Intel hardware. With Homebrew already installed, run `brew install subversion`; the SVN path can be selected in app Settings. The app interface is Simplified Chinese.
+
+**Signing:** this release is ad-hoc signed, without Developer ID signing or Apple notarization. macOS may block its first launch. Verify the source and checksums, then follow [Apple's official guidance](https://support.apple.com/102445). Do not disable Gatekeeper system-wide.
+
+### Run from source
 
 - macOS 14 or later; developed and verified on Apple Silicon.
 - Swift 6+ with a compatible Xcode or Command Line Tools installation.
@@ -181,7 +207,7 @@ open "dist/Mac SVN.app"
 
 The script builds for the local architecture, embeds the app icon and language declarations, and applies an ad-hoc signature. It refreshes this app's Launch Services registration. Quit the previous app process before reopening the rebuilt bundle. Build artifacts are excluded from Git.
 
-This is a local development build, without Developer ID signing or Apple notarization. Running `swift run` starts a bare executable without the bundle's icon and language configuration.
+Use `bash scripts/build-app.sh --universal` for both architectures, or `bash scripts/package-release.sh` to produce DMG, ZIP, and checksums in `dist/releases/1.0.0/`. Existing release output is not overwritten. The version comes from `VERSION`; packages use ad-hoc signing without Developer ID signing or Apple notarization. Running `swift run` starts a bare executable without the bundle's icon and language configuration.
 
 Liquid Glass appearance requires a macOS 26+ SDK and macOS 26+ at runtime; the minimum deployment target remains macOS 14. The build script records the actual linked SDK. CI uses Xcode 16.4 and checks the compatibility build, not Liquid Glass appearance.
 
@@ -243,7 +269,7 @@ Directory rules are stored in `svn:ignore`, one name or pattern per line. They a
 swift build
 ```
 
-[GitHub Actions](.github/workflows/ci.yml) builds the Release app on macOS 15 / Xcode 16.4, verifies its local signature, and checks whitespace. It does not publish releases. Automated test sources are not included in the current repository.
+[GitHub Actions](.github/workflows/ci.yml) builds the Release app on macOS 15 / Xcode 16.4, verifies its local signature, and checks whitespace. The separate [release workflow](.github/workflows/release.yml) validates version tags, builds universal packages, uploads assets to a draft, then publishes the release. Maintainers update `VERSION` and `release-notes/<version>.txt`, then push the matching `v<version>` tag. Automated test sources are not included in the current repository.
 
 ```text
 Sources/SVNCore/        SVN process execution, XML parsing, models, and operations
