@@ -34,6 +34,31 @@ struct WriteOperationProgress {
     var phase: Phase = .running
 }
 
+struct DirectoryIgnoreDraft: Identifiable {
+    var id: UUID { settings.id }
+    let settings: DirectoryIgnoreSettings
+    let initialPatterns: String
+}
+
+private struct WorkingCopyDraftKey: Hashable {
+    let path: String
+    let repository: String
+
+    init(_ copy: WorkingCopy) {
+        path = copy.root.resolvingSymlinksInPath().path
+        repository = copy.repositoryURL
+    }
+}
+
+private struct WorkingCopyDraft {
+    var message = ""
+    var fileFilter = ""
+    var selectedPaths: Set<String> = []
+    var showIgnored = false
+    var historyFilter = HistoryFilter()
+    var historyPath = "."
+}
+
 @MainActor
 final class AppModel: ObservableObject {
     @Published var workingCopy: WorkingCopy?
@@ -51,6 +76,7 @@ final class AppModel: ObservableObject {
     @Published private(set) var historyPageError: String?
     @Published private(set) var historyPageRequiresAuthentication = false
     @Published var message = ""
+    @Published var fileFilter = ""
     @Published var operation = ""
     @Published var result = "欢迎使用 Mac SVN"
     @Published var errorMessage: String?
@@ -65,10 +91,13 @@ final class AppModel: ObservableObject {
     @Published private(set) var checkoutProgress: CheckoutProgress?
     @Published private(set) var writeProgress: WriteOperationProgress?
     @Published var revertPlan: RevertPlan?
+    @Published var directoryIgnoreDraft: DirectoryIgnoreDraft?
+    @Published var directoryIgnoreError: String?
     @Published private(set) var authenticationStore = SVNAuthenticationStore()
     @Published private(set) var isAuthenticating = false
     private var operationTask: Task<Void, Never>?
     private var diffTask: Task<Void, Never>?
+    private var workingCopyDrafts: [WorkingCopyDraftKey: WorkingCopyDraft] = [:]
 
     var isBusy: Bool { !operation.isEmpty || isAuthenticating }
     var selectedEntries: [StatusEntry] { entries.filter { selectedPaths.contains($0.path) } }
@@ -140,20 +169,49 @@ final class AppModel: ObservableObject {
     /// 副本切换及右键操作共用同一读取流程，成功读取后才替换当前工作区。
     private func readWorkingCopy(at directory: URL) async throws -> WorkingCopy {
         let client = try client()
-        let copy = try await client.workingCopy(at: directory)
-        let entries = try await client.status(at: copy.root, includeIgnored: showIgnored)
+        let discovered = try await client.workingCopy(at: directory)
+        let copy = directory.resolvingSymlinksInPath() == discovered.root.resolvingSymlinksInPath()
+            ? discovered : try await client.workingCopy(at: discovered.root)
+        let key = WorkingCopyDraftKey(copy)
+        let draft = workingCopy.map(WorkingCopyDraftKey.init) == key
+            ? currentDraft() : workingCopyDrafts[key] ?? WorkingCopyDraft()
+        let entries = try await client.status(at: copy.root, includeIgnored: draft.showIgnored)
+        try Task.checkCancellation()
+        // 成功读取目标后才保存并切换，打开失败或取消不会丢失当前副本的编辑内容。
+        if let previous = workingCopy {
+            workingCopyDrafts[WorkingCopyDraftKey(previous)] = currentDraft()
+        }
         diffTask?.cancel()
         workingCopy = copy
         self.entries = entries
-        selectedPaths = []
+        selectedPaths = draft.selectedPaths.intersection(selectablePaths(in: entries))
+        fileFilter = draft.fileFilter
+        showIgnored = draft.showIgnored
         focusedPath = nil
         diffText = "选择一个文件查看差异"
         resetHistory()
-        message = ""
+        historyFilter = draft.historyFilter
+        historyPath = draft.historyPath
+        message = draft.message
         showHistory = false
+        revertPlan = nil
+        directoryIgnoreDraft = nil
+        directoryIgnoreError = nil
         remember(copy.root)
         rememberRepository(copy.repositoryURL)
         return copy
+    }
+
+    /// 草稿只留在当前 App 会话，按本地根目录及仓库 URL 隔离，不持久化提交内容。
+    private func currentDraft() -> WorkingCopyDraft {
+        WorkingCopyDraft(
+            message: message, fileFilter: fileFilter, selectedPaths: selectedPaths,
+            showIgnored: showIgnored, historyFilter: historyFilter, historyPath: historyPath
+        )
+    }
+
+    private func selectablePaths(in entries: [StatusEntry]) -> Set<String> {
+        Set(entries.filter { $0.canCommit || $0.canRevert || $0.item == "unversioned" }.map(\.path))
     }
 
     func refresh(at directory: URL? = nil) {
@@ -251,6 +309,92 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// 查看已有规则与快捷添加共用编辑窗口，用户保存前不改变 SVN 属性。
+    func editDirectoryIgnores(path: String = ".", adding pattern: String? = nil) {
+        guard let copy = workingCopy else { return }
+        perform("读取目录忽略规则") {
+            let settings = try await self.client().directoryIgnores(path: path, at: copy.root)
+            try Task.checkCancellation()
+            var text = settings.patterns ?? ""
+            if let pattern, !text.components(separatedBy: "\n").contains(pattern) {
+                if !text.isEmpty && !text.hasSuffix("\n") { text += "\n" }
+                text += pattern + "\n"
+            }
+            self.directoryIgnoreError = nil
+            self.directoryIgnoreDraft = DirectoryIgnoreDraft(settings: settings, initialPatterns: text)
+            self.result = "已读取目录忽略规则，保存前不会修改属性。"
+        }
+    }
+
+    func ignoreUnversioned(_ entry: StatusEntry, byExtension: Bool = false) {
+        guard !isBusy, entry.item == "unversioned" else { return }
+        do {
+            let name = (entry.path as NSString).lastPathComponent
+            let suffix = (name as NSString).pathExtension
+            guard !byExtension || !suffix.isEmpty else { throw SVNError("该项目没有可忽略的扩展名。") }
+            let pattern = byExtension
+                ? "*." + (try SVNConfiguration.literalIgnorePattern(suffix))
+                : try SVNConfiguration.literalIgnorePattern(name)
+            editDirectoryIgnores(path: parentDirectory(of: entry.path), adding: pattern)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func parentDirectory(of path: String) -> String {
+        let parent = (path as NSString).deletingLastPathComponent
+        return parent.isEmpty ? "." : parent
+    }
+
+    func isLocalDirectory(_ path: String) -> Bool {
+        guard let copy = workingCopy else { return false }
+        var isDirectory: ObjCBool = false
+        return FileManager.default.fileExists(atPath: copy.root.appendingPathComponent(path).path, isDirectory: &isDirectory)
+            && isDirectory.boolValue
+    }
+
+    func chooseDirectoryIgnores() {
+        guard !isBusy, let copy = workingCopy else { return }
+        let panel = NSOpenPanel()
+        panel.title = "选择目录编辑忽略规则"
+        panel.prompt = "编辑忽略"
+        panel.directoryURL = copy.root
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        let root = copy.root.resolvingSymlinksInPath().path
+        let selected = url.resolvingSymlinksInPath().path
+        guard selected == root || selected.hasPrefix(root + "/") else {
+            errorMessage = "请选择当前工作副本内的受控目录。"
+            return
+        }
+        editDirectoryIgnores(path: selected == root ? "." : String(selected.dropFirst(root.count + 1)))
+    }
+
+    func saveDirectoryIgnores(_ draft: DirectoryIgnoreDraft, patterns: String) {
+        guard !isBusy, directoryIgnoreDraft?.id == draft.id, workingCopy?.root == draft.settings.root else { return }
+        directoryIgnoreError = nil
+        perform("保存目录忽略规则", reportFailure: { error in
+            let detail = error is CancellationError
+                ? "保存已取消；已经写入的属性不会回滚，请关闭后刷新检查。" : error.localizedDescription
+            if self.directoryIgnoreDraft != nil {
+                self.directoryIgnoreError = detail
+            } else {
+                self.errorMessage = detail
+            }
+            self.result = detail
+        }) {
+            self.result = try await self.client().saveDirectoryIgnores(draft.settings, patterns: patterns)
+            self.directoryIgnoreDraft = nil
+            do {
+                try await self.reload()
+            } catch {
+                throw SVNError("目录忽略已保存，但刷新状态失败，请重新刷新检查。\n\(error.localizedDescription)")
+            }
+        }
+    }
+
     /// 命令结束前持续消费双管道输出；发布终态前先排空日志，避免旧输出覆盖下一次操作。
     private func receiveLiveOutput(
         _ action: (@escaping @Sendable (String) -> Void) async throws -> String
@@ -344,6 +488,13 @@ final class AppModel: ObservableObject {
         showHistory = true
         resetHistory()
         historyPath = path
+        reloadHistory()
+    }
+
+    /// 标签切换沿用此副本的查询范围与筛选，显式选择其他路径仍重置历史查询。
+    func showSavedHistory() {
+        guard !isBusy, workingCopy != nil else { return }
+        showHistory = true
         reloadHistory()
     }
 
@@ -516,6 +667,8 @@ final class AppModel: ObservableObject {
         guard !isBusy else { return }
         recentPaths.removeAll { $0 == path }
         UserDefaults.standard.set(recentPaths, forKey: "workingCopies")
+        let root = URL(fileURLWithPath: path).resolvingSymlinksInPath().path
+        workingCopyDrafts = workingCopyDrafts.filter { $0.key.path != root }
         if workingCopy?.root.path == path || recentPaths.isEmpty {
             closeWorkingCopy()
         }
@@ -532,9 +685,13 @@ final class AppModel: ObservableObject {
         diffText = "选择一个文件查看差异"
         resetHistory()
         message = ""
+        fileFilter = ""
+        showIgnored = false
         showHistory = false
         errorMessage = nil
         revertPlan = nil
+        directoryIgnoreDraft = nil
+        directoryIgnoreError = nil
         writeProgress = nil
         result = "欢迎使用 Mac SVN"
     }
@@ -564,8 +721,12 @@ final class AppModel: ObservableObject {
         let newInfo = try await client.workingCopy(at: copy.root)
         entries = newEntries
         workingCopy = newInfo
-        selectedPaths.formIntersection(Set(entries.filter { $0.canCommit || $0.canRevert || $0.item == "unversioned" }.map(\.path)))
+        selectedPaths.formIntersection(selectablePaths(in: entries))
+        let filter = historyFilter
+        let path = historyPath
         resetHistory()
+        historyFilter = filter
+        historyPath = path
         loadDiff()
     }
 

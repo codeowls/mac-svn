@@ -40,7 +40,7 @@ struct MacSVNApp: App {
                     .disabled(model.isBusy || model.workingCopy == nil)
                 Button("更新工作副本") { model.update() }
                     .disabled(model.isBusy || model.workingCopy == nil)
-                Button("历史记录") { model.loadHistory() }
+                Button("历史记录") { model.showSavedHistory() }
                     .disabled(model.isBusy || model.workingCopy == nil)
             }
         }

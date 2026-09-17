@@ -8,14 +8,13 @@ struct ContentView: View {
     @ViewState private var showCommit = false
     @ViewState private var showLogin = false
     @ViewState private var showDiff = false
-    @ViewState private var filter = ""
     @ViewState private var showOutput = false
     @ViewState private var footerHeight: CGFloat = 44
 
     private let statusRowHeight: CGFloat = 44
 
     private var visibleEntries: [StatusEntry] {
-        model.entries.filter { filter.isEmpty || $0.path.localizedCaseInsensitiveContains(filter) }
+        model.entries.filter { model.fileFilter.isEmpty || $0.path.localizedCaseInsensitiveContains(model.fileFilter) }
     }
 
     var body: some View {
@@ -81,6 +80,9 @@ struct ContentView: View {
         .toolbarBackground(.hidden, for: .windowToolbar)
         .sheet(isPresented: $showCheckout) { CheckoutView(model: model) }
         .sheet(isPresented: $showCommit) { commitReview }
+        .sheet(item: $model.directoryIgnoreDraft) { draft in
+            DirectoryIgnoreView(model: model, draft: draft)
+        }
         .sheet(item: $model.revertPlan) { plan in
             RevertReviewView(plan: plan, onCancel: { model.revertPlan = nil }) {
                 model.confirmRevert(plan)
@@ -107,7 +109,6 @@ struct ContentView: View {
         .onChange(of: model.focusedPath) { _, _ in model.loadDiff() }
         .onChange(of: model.workingCopy?.root) { _, root in
             if root == nil {
-                filter = ""
                 showCommit = false
                 showOutput = false
             }
@@ -151,7 +152,6 @@ struct ContentView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         ForEach(model.recentPaths, id: \.self) { path in
                             Button {
-                                filter = ""
                                 model.open(URL(fileURLWithPath: path))
                             } label: {
                                 HStack(alignment: .top, spacing: 10) {
@@ -172,14 +172,12 @@ struct ContentView: View {
                                         in: RoundedRectangle(cornerRadius: 10))
                             .contextMenu {
                                 Button {
-                                    filter = ""
                                     model.refresh(at: URL(fileURLWithPath: path))
                                 } label: {
                                     Label("刷新", systemImage: "arrow.clockwise")
                                 }
                                 .disabled(model.isBusy)
                                 Button {
-                                    filter = ""
                                     model.update(at: URL(fileURLWithPath: path))
                                 } label: {
                                     Label("更新", systemImage: "arrow.down.circle")
@@ -243,7 +241,7 @@ struct ContentView: View {
                 tab("本地变更", count: model.entries.count, selected: !model.showHistory) {
                     model.showHistory = false
                 }
-                tab("提交历史", count: nil, selected: model.showHistory) { model.loadHistory() }
+                tab("提交历史", count: nil, selected: model.showHistory) { model.showSavedHistory() }
                 Spacer()
                 Text(copy.root.path).font(.caption).foregroundStyle(.tertiary)
                     .lineLimit(1).truncationMode(.middle).help(copy.root.path)
@@ -277,12 +275,23 @@ struct ContentView: View {
     private var fileComparisonView: some View {
         VStack(spacing: 0) {
             HStack {
-                TextField("筛选文件路径", text: $filter)
+                TextField("筛选文件路径", text: $model.fileFilter)
                     .textFieldStyle(.roundedBorder)
-                Toggle("显示已忽略项", isOn: $model.showIgnored)
+                    .disabled(model.isBusy)
+                Menu("目录忽略") {
+                    Button("编辑工作副本根目录…") { model.editDirectoryIgnores() }
+                    Button("选择受控目录…") { model.chooseDirectoryIgnores() }
+                }
+                .fixedSize().disabled(model.isBusy)
+                Toggle("显示已忽略项", isOn: Binding(
+                    get: { model.showIgnored },
+                    set: {
+                        model.showIgnored = $0
+                        model.refresh()
+                    }
+                ))
                     .toggleStyle(.checkbox)
                     .disabled(model.isBusy)
-                    .onChange(of: model.showIgnored) { _, _ in model.refresh() }
                 Text("\(visibleEntries.count) 项").font(.caption).foregroundStyle(.secondary)
             }
             .padding(12)
@@ -334,6 +343,23 @@ struct ContentView: View {
                                     .disabled(model.isBusy || !entry.canReadHistory)
                                 Button("还原此项目…") { model.prepareRevert(paths: [entry.path]) }
                                     .disabled(model.isBusy || !entry.canRevert)
+                                Divider()
+                                if entry.item == "unversioned" {
+                                    Button("忽略此名称…") { model.ignoreUnversioned(entry) }
+                                        .disabled(model.isBusy)
+                                    if !model.isLocalDirectory(entry.path), !(entry.path as NSString).pathExtension.isEmpty {
+                                        Button("忽略同扩展名…") { model.ignoreUnversioned(entry, byExtension: true) }
+                                            .disabled(model.isBusy)
+                                    }
+                                }
+                                Button("编辑所在目录忽略…") {
+                                    model.editDirectoryIgnores(path: model.parentDirectory(of: entry.path))
+                                }
+                                .disabled(model.isBusy)
+                                if model.isLocalDirectory(entry.path), !["unversioned", "ignored"].contains(entry.item) {
+                                    Button("编辑此目录忽略…") { model.editDirectoryIgnores(path: entry.path) }
+                                        .disabled(model.isBusy)
+                                }
                             }
                         }
                     }

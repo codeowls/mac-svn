@@ -4,6 +4,15 @@ import Testing
 
 @Suite("SVN XML 与路径语义")
 struct XMLTests {
+    @Test func directoryIgnorePatternsPreserveSpacesAndEscapeNames() throws {
+        #expect(try SVNConfiguration.normalizeDirectoryIgnores("space name\r\n*.tmp\n") == "space name\n*.tmp\n")
+        #expect(try SVNConfiguration.normalizeDirectoryIgnores("\n\n") == "")
+        #expect(try SVNConfiguration.literalIgnorePattern("a*[?]\\ @.txt") == "a\\*\\[\\?\\]\\\\ @.txt")
+        #expect(throws: SVNError.self) { try SVNConfiguration.literalIgnorePattern("a\nb") }
+        #expect(throws: SVNError.self) { try SVNConfiguration.normalizeDirectoryIgnores("folder/*.log") }
+        #expect(throws: SVNError.self) { try SVNConfiguration.normalizeDirectoryIgnores("bad\0pattern") }
+    }
+
     @Test func globalIgnorePatternsKeepSVNGlobSemantics() throws {
         let patterns = try SVNConfiguration.normalizeIgnorePatterns(" .idea\n*.iml\t#*#  .idea  .*.swp \r\n")
         #expect(patterns == ".idea *.iml #*# .*.swp")
@@ -231,6 +240,82 @@ private struct Fixture {
 
 @Suite("真实本地 SVN 仓库集成")
 struct IntegrationTests {
+    @Test func directoryIgnoresPreserveScopePropertiesAndTrackedFiles() async throws {
+        let f = try await Fixture.create()
+        try FileManager.default.createDirectory(at: f.first.appendingPathComponent("-目录 @"), withIntermediateDirectories: false)
+        try FileManager.default.createDirectory(at: f.first.appendingPathComponent("-目录 @/nested"), withIntermediateDirectories: false)
+        try f.write("-目录 @/tracked.log", "base\n")
+        try await f.svn(["add", "--force", "--", "."])
+        try await f.svn(["commit", "--message", "initial"])
+        try await f.svn(["propset", "test:note", "keep", "--", "./-目录 @@"])
+        try f.write("-目录 @/tracked.log", "keep modification\n")
+        try f.write("-目录 @/debug.log", "ignore me\n")
+        try f.write("-目录 @/space name", "space\n")
+        try f.write("-目录 @/nested/debug.log", "keep nested\n")
+        try f.write("debug.log", "keep other directory\n")
+        let initial = try await f.client.directoryIgnores(path: "-目录 @", at: f.first)
+        #expect(initial.patterns == nil)
+        let result = try await f.client.saveDirectoryIgnores(initial, patterns: "*.log\nspace name\n")
+        #expect(result.contains("本地属性变更"))
+        let status = try await f.client.status(at: f.first, includeIgnored: true)
+        #expect(status.first { $0.path == "-目录 @/debug.log" }?.item == "ignored")
+        #expect(status.first { $0.path == "-目录 @/space name" }?.item == "ignored")
+        #expect(status.first { $0.path == "-目录 @/tracked.log" }?.item == "modified")
+        #expect(status.first { $0.path == "-目录 @/nested/debug.log" }?.item == "unversioned")
+        #expect(status.first { $0.path == "debug.log" }?.item == "unversioned")
+        let diff = try await f.client.diff(path: "-目录 @", at: f.first)
+        #expect(diff.contains("svn:ignore") && diff.contains("test:note"))
+        let loaded = try await f.client.directoryIgnores(path: "-目录 @", at: f.first)
+        _ = try await f.client.saveDirectoryIgnores(loaded, patterns: "")
+        #expect(try await f.client.directoryIgnores(path: "-目录 @", at: f.first).patterns == nil)
+        #expect(try await f.client.status(at: f.first).contains { $0.path == "-目录 @/debug.log" })
+        let remainingDiff = try await f.client.diff(path: "-目录 @", at: f.first)
+        #expect(remainingDiff.contains("test:note") && !remainingDiff.contains("svn:ignore"))
+        let cleared = try await f.client.directoryIgnores(path: "-目录 @", at: f.first)
+        _ = try await f.client.saveDirectoryIgnores(cleared, patterns: "*.log")
+        _ = try await f.client.commit(paths: ["-目录 @"], message: "share directory ignores", at: f.first)
+        _ = try await f.client.update(at: f.second)
+        #expect(try await f.client.directoryIgnores(path: "-目录 @", at: f.second).patterns == "*.log\n")
+        #expect(try await f.client.status(at: f.first).first { $0.path == "-目录 @/tracked.log" }?.item == "modified")
+        #expect(try String(contentsOf: f.second.appendingPathComponent("-目录 @/tracked.log"), encoding: .utf8) == "base\n")
+    }
+
+    @Test func directoryIgnoresLiteralNamesDoNotMatchOtherFiles() async throws {
+        let f = try await Fixture.create()
+        let name = "-中文 @ [draft]*?\\.tmp"
+        try f.write(name, "literal\n")
+        try f.write("-中文 @ d-other.tmp", "keep\n")
+        let initial = try await f.client.directoryIgnores(at: f.first)
+        let pattern = try SVNConfiguration.literalIgnorePattern(name)
+        _ = try await f.client.saveDirectoryIgnores(initial, patterns: pattern)
+        let status = try await f.client.status(at: f.first, includeIgnored: true)
+        #expect(status.first { $0.path == name }?.item == "ignored")
+        #expect(status.first { $0.path == "-中文 @ d-other.tmp" }?.item == "unversioned")
+        #expect(try String(contentsOf: f.first.appendingPathComponent(name), encoding: .utf8) == "literal\n")
+    }
+
+    @Test func directoryIgnoresRejectStalePropertiesAndOtherWorkingCopies() async throws {
+        let f = try await Fixture.create()
+        let stale = try await f.client.directoryIgnores(at: f.first)
+        try await f.svn(["propset", "svn:ignore", "external-rule", "."])
+        await #expect(throws: SVNError.self) {
+            try await f.client.saveDirectoryIgnores(stale, patterns: "*.tmp")
+        }
+        #expect(try await f.client.directoryIgnores(at: f.first).patterns == "external-rule\n")
+        _ = try await f.client.checkout(repository: f.repository.absoluteString, destination: f.first.appendingPathComponent("nested-copy"))
+        await #expect(throws: SVNError.self) {
+            try await f.client.directoryIgnores(path: "nested-copy", at: f.first)
+        }
+        try f.write("plain.txt", "file\n")
+        _ = try await f.client.add(paths: ["plain.txt"], at: f.first)
+        await #expect(throws: SVNError.self) {
+            try await f.client.directoryIgnores(path: "plain.txt", at: f.first)
+        }
+        await #expect(throws: SVNError.self) {
+            try await f.client.directoryIgnores(path: "../outside", at: f.first)
+        }
+    }
+
     @Test func historicalDiffPreservesRevisionSemanticsAndLocalChanges() async throws {
         let f = try await Fixture.create()
         let name = "-中文 @ & file.txt"

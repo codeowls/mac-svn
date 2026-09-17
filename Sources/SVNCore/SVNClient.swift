@@ -243,6 +243,60 @@ public struct SVNClient: Sendable {
         return output.stdout + output.stderr
     }
 
+    /// 只读取当前目录的 svn:ignore，不合并全局或祖先规则；保留属性不存在与空值的区别。
+    public func directoryIgnores(path: String = ".", at directory: URL) async throws -> DirectoryIgnoreSettings {
+        let target = try localTarget(path)
+        let output = try await command(["info", "--xml", "--", target], in: directory)
+        let copy = try SVNXML.info(output.stdout)
+        let info = try XMLReader.parse(output.stdout).child("entry")
+        guard copy.root.resolvingSymlinksInPath() == directory.resolvingSymlinksInPath(),
+              info?.attributes["kind"] == "dir",
+              let schedule = info?.child("wc-info")?.child("schedule")?.text,
+              ["normal", "add"].contains(schedule) else {
+            throw SVNError("请选择当前工作副本中有效的受控目录；不能修改外部副本或待删除、替换目录的忽略规则。")
+        }
+        let current = try await status(at: directory, includeIgnored: true)
+        if let entry = current.first(where: { $0.path == path }),
+           entry.isConflict || ["missing", "obstructed", "incomplete", "external"].contains(entry.item) {
+            throw SVNError("目录状态不允许编辑忽略规则：\(path)。请先处理冲突或异常状态。")
+        }
+        let properties = try await command(["proplist", "--xml", "--verbose", "--depth", "empty", "--", target], in: directory)
+        let xml = try XMLReader.parse(properties.stdout)
+        guard xml.name == "properties" else { throw SVNError("SVN 属性响应格式不正确。") }
+        let property = xml.descendants("property").first { $0.attributes["name"] == "svn:ignore" }
+        var patterns = property?.text
+        if let encoding = property?.attributes["encoding"] {
+            guard encoding == "base64", let data = Data(base64Encoded: property?.text ?? ""),
+                  let text = String(data: data, encoding: .utf8) else {
+                throw SVNError("目录忽略属性不是有效的 UTF-8 文本，无法编辑。")
+            }
+            patterns = text
+        }
+        return DirectoryIgnoreSettings(root: directory, path: path, patterns: patterns)
+    }
+
+    /// 保存前核对原属性，避免覆盖其他客户端在编辑期间修改的规则；只写入一个目录属性。
+    public func saveDirectoryIgnores(_ settings: DirectoryIgnoreSettings, patterns: String) async throws -> String {
+        let normalized = try SVNConfiguration.normalizeDirectoryIgnores(patterns)
+        let expected: String? = normalized.isEmpty ? nil : normalized
+        let current = try await directoryIgnores(path: settings.path, at: settings.root)
+        guard current.patterns == settings.patterns else {
+            throw SVNError("编辑期间目录忽略规则已变化，尚未保存。请关闭后重新读取规则。")
+        }
+        guard current.patterns != expected else { return "目录忽略规则没有变化。" }
+        try Task.checkCancellation()
+        let target = try localTarget(settings.path)
+        let arguments = expected.map {
+            ["propset", "--depth", "empty", "--", "svn:ignore", $0, target]
+        } ?? ["propdel", "--depth", "empty", "--", "svn:ignore", target]
+        let output = try await command(arguments, in: settings.root)
+        let saved = try await directoryIgnores(path: settings.path, at: settings.root)
+        guard saved.patterns == expected else {
+            throw SVNError("保存命令已执行，但读回的目录忽略规则与预期不一致，请刷新后检查。")
+        }
+        return "目录忽略规则已保存为本地属性变更；提交该目录后才会共享到仓库。\n" + output.stdout + output.stderr
+    }
+
     /// Re-read the working copy before committing; never trust an old UI status snapshot.
     public func commit(
         paths: [String], message: String, at directory: URL,

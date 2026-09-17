@@ -82,6 +82,13 @@ public struct HistoricalDiff: Sendable {
     public let text: String
 }
 
+public struct DirectoryIgnoreSettings: Identifiable, Sendable {
+    public let id = UUID()
+    public let root: URL
+    public let path: String
+    public let patterns: String?
+}
+
 public struct RevertPlan: Identifiable, Sendable {
     public let id = UUID()
     public let root: URL
