@@ -383,6 +383,124 @@ public struct SVNClient: Sendable {
         return "目录忽略规则已保存为本地属性变更；提交该目录后才会共享到仓库。\n" + output.stdout + output.stderr
     }
 
+    /// 从 SVN 冲突元数据读取真实的基准、本地及传入版本路径；查看不会自动解决冲突。
+    public func conflictDetails(path: String, at directory: URL) async throws -> ConflictDetails {
+        let target = try localTarget(path)
+        let current = try await status(at: directory)
+        guard let entry = current.first(where: { $0.path == path }), entry.isConflict else {
+            throw SVNError("该路径已不处于冲突状态，请刷新后检查。")
+        }
+        let output = try await command(["info", "--xml", "--depth", "empty", "--", target], in: directory)
+        let copy = try SVNXML.info(output.stdout)
+        guard copy.root.resolvingSymlinksInPath().path == directory.resolvingSymlinksInPath().path,
+              let info = try XMLReader.parse(output.stdout).child("entry") else {
+            throw SVNError("冲突路径不属于当前工作副本。")
+        }
+        let nodes = info.children.filter { ["conflict", "tree-conflict"].contains($0.name) }
+        guard !nodes.isEmpty else { throw SVNError("SVN 未返回冲突详情，请刷新后重新读取。") }
+        var summary: [String] = []
+        var files: [ConflictFile] = []
+        if info.attributes["kind"] == "file", FileManager.default.fileExists(atPath: directory.appendingPathComponent(path).path) {
+            files.append(ConflictFile(id: "working", title: "当前工作文件", url: directory.appendingPathComponent(path)))
+        }
+        for node in nodes {
+            let type = node.name == "tree-conflict" ? "tree" : node.attributes["type"] ?? "unknown"
+            let typeLabel = ["text": "文件内容冲突", "property": "属性冲突", "tree": "树冲突"][type] ?? "未知冲突"
+            let operation = node.attributes["operation"] ?? "未知"
+            let operationLabel = ["update": "更新", "switch": "切换", "merge": "合并"][operation] ?? operation
+            summary.append(typeLabel + " · 操作：" + operationLabel)
+            if type == "tree" {
+                let reason = node.attributes["reason"] ?? "未知"
+                let action = node.attributes["action"] ?? "未知"
+                let reasonLabel = [
+                    "edit": "本地修改", "delete": "本地删除", "missing": "本地缺失", "obstructed": "路径被占用",
+                    "added": "本地新增", "replaced": "本地替换", "unversioned": "未受控项目",
+                    "moved-away": "已移走", "moved-here": "已移入"
+                ][reason] ?? reason
+                let actionLabel = ["edit": "修改", "delete": "删除", "add": "新增", "replace": "替换"][action] ?? action
+                summary.append("本地原因：\(reasonLabel) · 传入操作：\(actionLabel)")
+            }
+            for version in node.children where version.name == "version" {
+                let label = version.attributes["side"] == "source-left" ? "原基准版本" : "传入版本"
+                let kind = version.attributes["kind"] ?? "未知类型"
+                let kindLabel = ["file": "文件", "dir": "目录", "none": "节点不存在"][kind] ?? kind
+                summary.append("\(label)：/\(version.attributes["path-in-repos"] ?? "") · r\(version.attributes["revision"] ?? "?") · \(kindLabel)")
+            }
+            for (key, title) in [
+                ("prev-base-file", "原基准内容"), ("prev-wc-file", "合并前本地内容"),
+                ("cur-base-file", "传入内容"), ("prop-file", "属性冲突说明")
+            ] {
+                if let file = node.child(key), !file.text.isEmpty {
+                    files.append(ConflictFile(id: key, title: title, url: URL(fileURLWithPath: file.text)))
+                }
+            }
+        }
+        let digest = try nodes.map(conflictMetadataDigest).sorted().joined(separator: "\n")
+        let canResolve = entry.item == "conflicted" && entry.properties != "conflicted" && !entry.treeConflict
+            && info.attributes["kind"] == "file" && nodes.allSatisfy { $0.attributes["type"] == "text" }
+        return ConflictDetails(
+            root: directory, entry: entry, summary: summary, files: files,
+            canMarkResolved: canResolve, metadataDigest: digest
+        )
+    }
+
+    /// 元数据属性的输出顺序可能变化，按键和子节点排序后生成可重读比较的指纹。
+    private func conflictMetadataDigest(_ node: XMLNode) throws -> String {
+        let value: [String: Any] = [
+            "name": node.name, "text": node.children.isEmpty ? node.text : "",
+            "attributes": node.attributes, "children": try node.children.map(conflictMetadataDigest).sorted()
+        ]
+        return SHA256.hash(data: try JSONSerialization.data(withJSONObject: value, options: [.sortedKeys])).description
+    }
+
+    public func conflictFileContent(_ file: ConflictFile, at directory: URL) throws -> Data {
+        let root = directory.resolvingSymlinksInPath().path
+        let path = file.url.resolvingSymlinksInPath().path
+        guard path.hasPrefix(root + "/"),
+              try FileManager.default.attributesOfItem(atPath: file.url.path)[.type] as? FileAttributeType == .typeRegular else {
+            throw SVNError("冲突查看仅支持当前工作副本内的普通文件，不跟随符号链接。")
+        }
+        return try Data(contentsOf: file.url)
+    }
+
+    /// 在确认前读取最终工作内容；只支持单文件内容冲突，不连带接受属性或树冲突。
+    public func prepareConflictResolution(_ details: ConflictDetails) async throws -> ConflictResolutionPlan {
+        let current = try await conflictDetails(path: details.entry.path, at: details.root)
+        guard current.canMarkResolved, current.entry == details.entry,
+              current.metadataDigest == details.metadataDigest,
+              let working = current.files.first(where: { $0.id == "working" }) else {
+            throw SVNError("冲突状态已变化，或包含尚不支持直接标记的属性／树冲突。请重新读取详情。")
+        }
+        let data = try conflictFileContent(working, at: details.root)
+        let text = String(data: data, encoding: .utf8)
+        let markers = text?.components(separatedBy: .newlines).contains {
+            $0.hasPrefix("<<<<<<< ") || $0.hasPrefix("||||||| ") || $0.hasPrefix(">>>>>>> ")
+        } ?? false
+        return ConflictResolutionPlan(
+            details: details,
+            preview: text ?? "当前内容不是 UTF-8 文本（\(data.count) 字节）。请用合适的编辑器检查最终文件后再确认。",
+            containsConflictMarkers: markers, contentDigest: SHA256.hash(data: data).description
+        )
+    }
+
+    /// 确认内容与冲突身份未变化后才采用 working；命令结束后以 SVN 重新读取的状态为准。
+    public func resolveConflict(_ plan: ConflictResolutionPlan) async throws -> String {
+        let fresh = try await prepareConflictResolution(plan.details)
+        guard fresh.contentDigest == plan.contentDigest else {
+            throw SVNError("确认期间工作文件内容已变化，尚未标记解决。请重新检查最终内容。")
+        }
+        try Task.checkCancellation()
+        let output = try await command(
+            ["resolve", "--accept", "working", "--depth", "empty", "--", try localTarget(plan.details.entry.path)],
+            in: plan.details.root
+        )
+        let entries = try await status(at: plan.details.root)
+        guard !entries.contains(where: { $0.path == plan.details.entry.path && $0.isConflict }) else {
+            throw SVNError("标记命令已执行，但该文件仍处于冲突状态，请重新检查。\n\(output.stdout)\(output.stderr)")
+        }
+        return "已保留当前工作文件并标记解决；尚未提交到仓库。\n" + output.stdout + output.stderr
+    }
+
     /// Re-read the working copy before committing; never trust an old UI status snapshot.
     public func commit(
         paths: [String], message: String, at directory: URL,

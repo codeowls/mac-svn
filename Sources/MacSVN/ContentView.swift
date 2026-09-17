@@ -50,6 +50,7 @@ struct ContentView: View {
                     }
             }
         }
+        .background(ViewWindowReader { model.mainWindow = $0 })
         .toolbar {
             ToolbarItemGroup {
                 Button { model.chooseWorkingCopy() } label: {
@@ -83,6 +84,9 @@ struct ContentView: View {
         .sheet(isPresented: $showCommit) { commitReview }
         .sheet(item: $model.directoryIgnoreDraft) { draft in
             DirectoryIgnoreView(model: model, draft: draft)
+        }
+        .sheet(item: $model.conflictDetails) { details in
+            ConflictView(model: model, details: details).id(details.id)
         }
         .sheet(item: $model.revertPlan) { plan in
             RevertReviewView(plan: plan, onCancel: { model.revertPlan = nil }) {
@@ -330,8 +334,12 @@ struct ContentView: View {
                                 .labelsHidden().toggleStyle(.checkbox)
                                 .disabled(model.isBusy || (!entry.canCommit && !entry.canRevert && entry.item != "unversioned"))
                                 Button {
-                                    model.focusedPath = entry.path
-                                    showDiff = true
+                                    if entry.isConflict {
+                                        model.inspectConflict(path: entry.path)
+                                    } else {
+                                        model.focusedPath = entry.path
+                                        showDiff = true
+                                    }
                                 } label: {
                                     HStack {
                                         VStack(alignment: .leading, spacing: 5) {
@@ -340,7 +348,8 @@ struct ContentView: View {
                                             Text(entry.label).font(.caption2).foregroundStyle(statusColor(entry))
                                                 .help(entry.item == "unversioned"
                                                     ? "仅存在于本地，尚未加入 SVN；点击查看说明"
-                                                    : entry.item == "ignored" ? "匹配 SVN 忽略规则；点击查看说明" : "点击查看文件差异")
+                                                    : entry.item == "ignored" ? "匹配 SVN 忽略规则；点击查看说明"
+                                                    : entry.isConflict ? "点击查看冲突详情" : "点击查看文件差异")
                                         }
                                         Spacer(minLength: 0)
                                         Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.tertiary)
@@ -353,6 +362,10 @@ struct ContentView: View {
                             .background(model.focusedPath == entry.path ? Color.primary.opacity(0.07) : .clear,
                                         in: RoundedRectangle(cornerRadius: 9))
                             .contextMenu {
+                                if entry.isConflict {
+                                    Button("查看冲突详情…") { model.inspectConflict(path: entry.path) }
+                                        .disabled(model.isBusy)
+                                }
                                 Button("查看此路径历史") { model.loadHistory(path: entry.path) }
                                     .disabled(model.isBusy || !entry.canReadHistory)
                                 Button("还原此项目…") { model.prepareRevert(paths: [entry.path]) }

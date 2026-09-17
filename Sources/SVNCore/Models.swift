@@ -124,6 +124,30 @@ public struct RevertPlan: Identifiable, Sendable {
     public let items: [RevertItem]
 }
 
+public struct ConflictFile: Identifiable, Sendable, Equatable {
+    public let id: String
+    public let title: String
+    public let url: URL
+}
+
+public struct ConflictDetails: Identifiable, Sendable {
+    public let id = UUID()
+    public let root: URL
+    public let entry: StatusEntry
+    public let summary: [String]
+    public let files: [ConflictFile]
+    public let canMarkResolved: Bool
+    let metadataDigest: String
+}
+
+public struct ConflictResolutionPlan: Identifiable, Sendable {
+    public let id = UUID()
+    public let details: ConflictDetails
+    public let preview: String
+    public let containsConflictMarkers: Bool
+    let contentDigest: String
+}
+
 public struct RevertItem: Identifiable, Sendable, Equatable {
     public var id: String { entry.path }
     public let entry: StatusEntry

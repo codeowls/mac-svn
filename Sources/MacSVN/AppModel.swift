@@ -67,6 +67,7 @@ private struct WorkingCopyDraft {
 
 @MainActor
 final class AppModel: ObservableObject {
+    weak var mainWindow: NSWindow?
     @Published var workingCopy: WorkingCopy?
     @Published var entries: [StatusEntry] = []
     @Published var selectedPaths: Set<String> = []
@@ -100,6 +101,9 @@ final class AppModel: ObservableObject {
     @Published var revertPlan: RevertPlan?
     @Published var directoryIgnoreDraft: DirectoryIgnoreDraft?
     @Published var directoryIgnoreError: String?
+    @Published var conflictDetails: ConflictDetails?
+    @Published var conflictResolutionPlan: ConflictResolutionPlan?
+    @Published var conflictError: String?
     @Published private(set) var authenticationStore = SVNAuthenticationStore()
     @Published private(set) var isAuthenticating = false
     private var operationTask: Task<Void, Never>?
@@ -155,6 +159,10 @@ final class AppModel: ObservableObject {
     }
 
     func chooseWorkingCopy() {
+        guard let window = mainWindow else {
+            errorMessage = "未能定位主窗口，请重新打开应用后再选择工作副本。"
+            return
+        }
         let panel = NSOpenPanel()
         panel.title = "打开 SVN 工作副本"
         panel.prompt = "打开"
@@ -162,8 +170,10 @@ final class AppModel: ObservableObject {
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        open(url)
+        panel.beginSheetModal(for: window) { response in
+            guard response == .OK, let url = panel.url else { return }
+            self.open(url)
+        }
     }
 
     func open(_ directory: URL) {
@@ -204,6 +214,9 @@ final class AppModel: ObservableObject {
         revertPlan = nil
         directoryIgnoreDraft = nil
         directoryIgnoreError = nil
+        conflictDetails = nil
+        conflictResolutionPlan = nil
+        conflictError = nil
         remember(copy.root)
         rememberRepository(copy.repositoryURL)
         return copy
@@ -249,7 +262,7 @@ final class AppModel: ObservableObject {
             self.writeProgress?.phase = .completed
             try await self.reload()
             if self.entries.contains(where: \.isConflict) {
-                self.result += "\n更新产生冲突，请检查标记为冲突的文件。首版请使用外部工具解决冲突。"
+                self.result += "\n更新产生冲突，请点击冲突项目查看详情；处理最终内容后再检查并标记解决。"
             }
         }
     }
@@ -313,6 +326,47 @@ final class AppModel: ObservableObject {
             self.result = try await self.client().revert(plan)
             try await self.reload()
             self.result = "还原完成\n\n" + self.result
+        }
+    }
+
+    func inspectConflict(path: String) {
+        guard !isBusy, let copy = workingCopy else { return }
+        conflictError = nil
+        conflictResolutionPlan = nil
+        perform("读取冲突详情", reportFailure: { error in
+            if self.conflictDetails != nil {
+                self.conflictError = error.localizedDescription
+            } else {
+                self.errorMessage = error.localizedDescription
+            }
+        }) {
+            self.conflictDetails = try await self.client().conflictDetails(path: path, at: copy.root)
+        }
+    }
+
+    func prepareConflictResolution(_ details: ConflictDetails) {
+        guard !isBusy, conflictDetails?.id == details.id else { return }
+        conflictError = nil
+        perform("检查解决结果", reportFailure: { error in
+            self.conflictError = error.localizedDescription
+        }) {
+            self.conflictResolutionPlan = try await self.client().prepareConflictResolution(details)
+        }
+    }
+
+    /// 用户确认最终内容后才解除冲突；失败或取消仍重新读取状态，不自动重新提交。
+    func confirmConflictResolution(_ plan: ConflictResolutionPlan) {
+        guard !isBusy, conflictResolutionPlan?.id == plan.id,
+              conflictDetails?.id == plan.details.id, workingCopy?.root == plan.details.root else { return }
+        conflictResolutionPlan = nil
+        conflictDetails = nil
+        perform("标记冲突已解决", refreshAfterFailure: true) {
+            self.result = try await self.client().resolveConflict(plan)
+            do {
+                try await self.reload()
+            } catch {
+                throw SVNError("该文件已标记解决，但工作区刷新失败，请重新刷新检查。\n\(error.localizedDescription)")
+            }
         }
     }
 
@@ -725,6 +779,9 @@ final class AppModel: ObservableObject {
         revertPlan = nil
         directoryIgnoreDraft = nil
         directoryIgnoreError = nil
+        conflictDetails = nil
+        conflictResolutionPlan = nil
+        conflictError = nil
         writeProgress = nil
         result = "欢迎使用 Mac SVN"
     }

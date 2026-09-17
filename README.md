@@ -74,6 +74,7 @@ open "dist/Mac SVN.app"
 - “未纳入版本控制”表示项目仅存在于本地，尚未加入 SVN；点击可查看说明，不自动添加或上传。
 - 将未跟踪文件或目录添加到版本控制；添加目录时不递归添加子项。
 - 勾选文件、填写说明、检查清单后提交；提交前重新校验状态。
+- 点击冲突项目查看类型、操作、原基准／传入版本及真实辅助文件；内容冲突可用默认编辑器打开工作文件，保存后重新读取并检查最终内容。明确确认后才采用当前文件标记解决，确认期间内容或冲突状态变化会拒绝执行；完成后重新读取 SVN 状态，仍需单独提交。属性和树冲突仅提供详情，需用 SVN 命令行或专用工具处理。
 - 更新工作副本，产生冲突时保留冲突供后续处理。更新与提交自动展开真实 SVN 输出，显示耗时及进行中／完成／失败／取消状态；失败或取消保留日志，提交结果不明时提示先核实历史。
 - 选中项目后可还原，执行前展示目标、实际差异及影响，明确确认后才丢弃修改。确认时重新核对状态、属性和内容（含二进制），发生变化则拒绝执行；还原后重新读取状态。普通新增文件撤销新增安排但保留本地内容，带历史复制文件会被删除。
 - 分页查看提交历史，每次加载 50 条，可继续加载更早记录；按作者、提交说明和变更路径组合筛选，明确仅筛选已加载记录。续读失败或取消时保留已有记录，可重试。
@@ -188,6 +189,7 @@ Liquid Glass appearance requires a macOS 26+ SDK and macOS 26+ at runtime; the m
 
 - Open existing working copies or browse a remote repository and check out a selected branch into a new or empty directory. Existing nonempty directories are not overwritten; externals are excluded.
 - Keep recent working copies and repository addresses. Removing a recent entry requires confirmation and does not delete local files.
+- Inspect conflict types, operations, base/incoming revisions, and actual conflict files. Open the working file in its default editor, review the saved result, and explicitly confirm before marking a file-content conflict resolved. Content or conflict changes after review require a new review. SVN status is read back; committing remains a separate action. Property and tree conflicts are read-only and require SVN or a dedicated tool.
 - Review and filter local changes, including content, properties, missing files, and conflicts. Unversioned files are clearly distinguished from versioned changes.
 - Inspect unified or side-by-side text diffs with line numbers, change counts, and navigation between changed sections. Binary files, including Word documents, show an explicit limitation message with expandable original SVN diagnostics and property changes.
 - Add, revert, or commit only selected items. Commits are reviewed before execution; directories do not automatically include unselected children.
@@ -233,7 +235,7 @@ Directory rules are stored in `svn:ignore`, one name or pattern per line. They a
 - Externals and nested working copies are managed separately. Revert does not currently support conflicts, move pairs, or deleted/missing/replaced/copied directories.
 - Writes are serialized within one window. Do not modify the same working copy concurrently from another client.
 - Cancellation does not roll back completed work. Failed or cancelled checkout can leave a partial directory. If a commit result is unclear, inspect repository history before retrying.
-- Text diffs do not yet include syntax highlighting, word-level highlighting, or conflict resolution. Large-workspace and large-diff performance needs further validation. Binary notices do not mean the versions are identical.
+- Text diffs do not yet include syntax highlighting, word-level highlighting, or an in-app merge editor. Large-workspace and large-diff performance needs further validation. Binary notices do not mean the versions are identical.
 
 ### Build checks and layout
 

@@ -5,6 +5,7 @@ import SwiftUI
 struct OperationOutputView: NSViewRepresentable {
     let text: String
     let followsOutput: Bool
+    var accessibilityLabel = "完整操作输出"
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -27,7 +28,7 @@ struct OperationOutputView: NSViewRepresentable {
         view.autoresizingMask = [.width]
         view.textContainer?.widthTracksTextView = true
         view.textContainer?.containerSize = NSSize(width: scroll.contentSize.width, height: .greatestFiniteMagnitude)
-        view.setAccessibilityLabel("完整操作输出")
+        view.setAccessibilityLabel(accessibilityLabel)
         scroll.documentView = view
         return scroll
     }
