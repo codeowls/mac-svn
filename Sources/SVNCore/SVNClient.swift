@@ -154,6 +154,48 @@ public struct SVNClient: Sendable {
         )
     }
 
+    /// 新增无前版本、删除无后版本；带历史新增按复制来源比较，替换仍保留被替换节点。
+    public func historicalFileVersions(change: LogChangedPath, revision: String) throws -> HistoricalFileVersions {
+        guard let revision = Int(revision), revision > 0,
+              ["A", "D", "M", "R"].contains(change.action) else {
+            throw SVNError("无法识别历史文件的版本号或变更类型。")
+        }
+        _ = try historicalRelativePath(change.path)
+        let before: HistoricalFileVersion?
+        if change.action == "A", let source = change.copyFromPath {
+            _ = try historicalRelativePath(source)
+            guard let sourceRevision = change.copyFromRevision.flatMap(Int.init),
+                  sourceRevision >= 0, sourceRevision < revision else {
+                throw SVNError("复制来源的版本号无效。")
+            }
+            before = HistoricalFileVersion(path: source, revision: sourceRevision, isCopySource: true)
+        } else {
+            before = change.action == "A" ? nil
+                : HistoricalFileVersion(path: change.path, revision: revision - 1, isCopySource: false)
+        }
+        let after = change.action == "D" ? nil
+            : HistoricalFileVersion(path: change.path, revision: revision, isCopySource: false)
+        return HistoricalFileVersions(before: before, after: after)
+    }
+
+    /// 读取仓库原始字节，不经过 UTF-8 转换或关键词展开，Word、图片等二进制文件也保持完整。
+    public func historicalFileContent(_ version: HistoricalFileVersion, at directory: URL) async throws -> Data {
+        let relativePath = try historicalRelativePath(version.path)
+        let info = try await command(["info", "--xml", "--", ".@"], in: directory)
+        let root = try SVNXML.repositoryInfo(info.stdout).rootURL
+        guard let rootURL = URL(string: root) else {
+            throw SVNError("仓库根地址无效。")
+        }
+        let target = rootURL.appendingPathComponent(relativePath).absoluteString + "@\(version.revision)"
+        let metadata = try await command(["info", "--xml", "-r", String(version.revision), "--", target])
+        guard try XMLReader.parse(metadata.stdout).child("entry")?.attributes["kind"] == "file" else {
+            throw SVNError("所选版本是目录，不能作为单个文件导出。")
+        }
+        let output = try await command(["cat", "--ignore-keywords", "-r", String(version.revision), "--", target])
+        try Task.checkCancellation()
+        return output.stdoutData
+    }
+
     private func historicalRelativePath(_ path: String) throws -> String {
         guard path.hasPrefix("/"), !path.contains("\0"),
               !path.split(separator: "/").contains(where: { $0 == ".." || $0 == "." }) else {

@@ -82,6 +82,28 @@ public struct HistoricalDiff: Sendable {
     public let text: String
 }
 
+public struct HistoricalFileVersion: Sendable, Equatable {
+    public let path: String
+    public let revision: Int
+    public let isCopySource: Bool
+
+    public var label: String {
+        "\(path) · r\(revision)" + (isCopySource ? "（复制来源）" : "")
+    }
+
+    public var suggestedFilename: String {
+        let name = URL(fileURLWithPath: path)
+        let suffix = name.pathExtension
+        let base = suffix.isEmpty ? name.lastPathComponent : name.deletingPathExtension().lastPathComponent
+        return "\(base)-r\(revision)" + (suffix.isEmpty ? "" : ".\(suffix)")
+    }
+}
+
+public struct HistoricalFileVersions: Sendable {
+    public let before: HistoricalFileVersion?
+    public let after: HistoricalFileVersion?
+}
+
 public struct DirectoryIgnoreSettings: Identifiable, Sendable {
     public let id = UUID()
     public let root: URL

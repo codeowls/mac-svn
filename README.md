@@ -79,6 +79,7 @@ open "dist/Mac SVN.app"
 - 分页查看提交历史，每次加载 50 条，可继续加载更早记录；按作者、提交说明和变更路径组合筛选，明确仅筛选已加载记录。续读失败或取消时保留已有记录，可重试。
 - 支持在历史页选择已提交的文件，或右键本地变更项查看该路径历史；可返回工作副本历史，重载及登录重试保持当前查询范围。选中提交后显示该次提交的变更文件／目录列表，区分新增、修改、删除、替换和复制来源。路径按仓库根目录显示，以服务器返回的授权范围为准。
 - 点击历史变更列表中的文件／目录整行可查看对应提交的差异；行尾箭头及悬停高亮提示可点击，标注两端路径与版本；新增、删除、替换按前后版本比较，新增复制按复制来源版本比较。复用统一／并排视图；Word 等二进制文件显示中文能力提示，隐藏无效的展示切换，原始诊断及属性变更可在“技术详情”中展开。读取失败可重试；不会使用或改动本地未提交内容。
+- 历史文件支持分别导出前／后版本，保留原始二进制内容及文件扩展名；新增和删除只提供存在的一端，带历史新增可导出复制来源，替换保留被替换的前版本。保存位置需在当前工作副本以外；读取失败或取消不写入目标文件。目录不能作为单文件导出，导出不包含 SVN 属性。
 - 历史读取失败与空历史分别显示；认证失败可直接登录仓库，登录成功后重新读取历史。工作区标题显示当前仓库的 App 登录账号；未登录时仍允许使用本机 SVN 已有认证配置。
 - 查看操作输出和错误信息，原始历史查询诊断保留在操作输出中；支持中断进行中的命令。
 - 检出时自动展开实时日志，显示已完成项目数（文件/目录）、最近完成路径及耗时；等待新输出时明确提示。大文件传输期间 SVN 可能暂时没有新通知，不显示推算百分比。失败显示 SVN 原始错误和输出，取消保留已收到的日志。
@@ -191,6 +192,7 @@ Liquid Glass appearance requires a macOS 26+ SDK and macOS 26+ at runtime; the m
 - Add, revert, or commit only selected items. Commits are reviewed before execution; directories do not automatically include unselected children.
 - Review the actual changes before reverting. State and content are checked again at confirmation. Ordinary newly added files remain on disk after reverting their addition; files added with history may be deleted by SVN revert.
 - Browse history in pages of 50 revisions, filter loaded records by author, message, and path, and view history for an individual versioned path. Click a changed file or directory row to inspect its historical diff, including copy-source comparisons.
+- Export either existing side of a historical file comparison, including binary files and copy sources. Replacement exports retain the replaced node as the before version. Exports preserve raw bytes and file extensions, exclude SVN properties, and must be saved outside the current working copy. Failed or cancelled reads leave the destination untouched.
 - Stream real command output for checkout, update, and commit, with elapsed time and cancellation. Checkout progress reports received items rather than an estimated percentage.
 - Preserve commit messages, selections, filters, and history scope separately for each working copy during the current session. Selections are revalidated when returning to a working copy. Drafts are not persisted across app restarts.
 - Configure the SVN executable, app-specific global ignore patterns, and directory-level `svn:ignore` properties.

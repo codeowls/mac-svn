@@ -2,7 +2,8 @@ import Foundation
 import Darwin
 
 public struct CommandOutput: Sendable {
-    public let stdout: String
+    public let stdoutData: Data
+    public var stdout: String { String(decoding: stdoutData, as: UTF8.self) }
     public let stderr: String
     public let exitCode: Int32
 }
@@ -127,7 +128,7 @@ private final class ProcessExecution: @unchecked Sendable {
             throw SVNError("向子进程传递输入失败：\(error.localizedDescription)")
         }
         return CommandOutput(
-            stdout: String(decoding: outputData, as: UTF8.self),
+            stdoutData: outputData,
             stderr: String(decoding: errorData.get(), as: UTF8.self),
             exitCode: process.terminationStatus
         )
