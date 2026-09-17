@@ -240,6 +240,50 @@ public struct SVNClient: Sendable {
         return output.stdout + output.stderr
     }
 
+    /// 失败或取消后只检查目标本身；不自动清理、不递归删除，也不误打开其祖先工作副本。
+    public func inspectCheckout(at directory: URL) async throws -> CheckoutInspection {
+        let manager = FileManager.default
+        var isDirectory: ObjCBool = false
+        guard manager.fileExists(atPath: directory.path, isDirectory: &isDirectory) else {
+            return CheckoutInspection(
+                directory: directory, workingCopy: nil, summary: "目标目录尚未创建。",
+                guidance: "可修正原始错误后重新检出。"
+            )
+        }
+        guard isDirectory.boolValue else {
+            throw SVNError("检出目标不是文件夹：\(directory.path)")
+        }
+        let contents = try manager.contentsOfDirectory(atPath: directory.path)
+        guard contents.contains(".svn") else {
+            let empty = contents.allSatisfy { $0 == ".DS_Store" }
+            return CheckoutInspection(
+                directory: directory, workingCopy: nil,
+                summary: empty ? "目标文件夹为空，未发现 SVN 元数据。" : "目标文件夹有内容，但未发现 SVN 元数据。",
+                guidance: empty ? "可修正原始错误后重新检出。"
+                    : "请在访达中核对并保留所需文件，重新检出时选择其他空目录。"
+            )
+        }
+        let copy = try await workingCopy(at: directory)
+        // 目标 URL 可能创建于目录出现之前，比较规范路径，避免目录尾随斜线造成误判。
+        guard copy.root.resolvingSymlinksInPath().path == directory.resolvingSymlinksInPath().path else {
+            throw SVNError("目标未识别为独立工作副本，请在访达中检查：\(directory.path)")
+        }
+        // verbose 包含正常但带工作副本锁的节点；仅检查本地，不能据此断言已完整下载。
+        let output = try await command(["status", "--xml", "--verbose", "--ignore-externals", "--", ".@"], in: directory)
+        let nodes = try XMLReader.parse(output.stdout).descendants("wc-status")
+        let locked = nodes.contains { $0.attributes["wc-locked"] == "true" }
+        let entries = try SVNXML.status(output.stdout)
+        let incomplete = entries.filter { ["incomplete", "missing", "obstructed"].contains($0.item) }.count
+        let conflicts = entries.filter(\.isConflict).count
+        return CheckoutInspection(
+            directory: directory, workingCopy: copy,
+            summary: "已识别工作副本；不完整／缺失／阻塞 \(incomplete) 项，冲突 \(conflicts) 项。"
+                + (locked ? " 检测到工作副本锁。" : ""),
+            guidance: (locked ? "确认其他 SVN 操作已结束后，使用 SVN cleanup 清理工作副本锁，再重新检查。" : "")
+                + "可打开副本检查状态，再手动更新补齐；本地检查不能证明检出完整。不要直接在此非空目录重新检出。"
+        )
+    }
+
     /// Query repository metadata without requiring a local working copy.
     public func repositoryLocation(_ repository: String) async throws -> RepositoryLocation {
         let target = try Self.repositoryTarget(repository)

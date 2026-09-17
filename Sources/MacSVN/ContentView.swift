@@ -9,6 +9,7 @@ struct ContentView: View {
     @ViewState private var showLogin = false
     @ViewState private var showDiff = false
     @ViewState private var showOutput = false
+    @ViewState private var followsOutput = true
     @ViewState private var recentPathPendingRemoval: String?
     @ViewState private var footerHeight: CGFloat = 44
 
@@ -492,7 +493,38 @@ struct ContentView: View {
                 .buttonStyle(.plain).font(.caption).foregroundStyle(.secondary)
             }
             .frame(height: statusRowHeight)
-            if let progress = model.writeProgress {
+            if let recovery = model.checkoutRecovery {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("检出目录：\(recovery.destination.path)").textSelection(.enabled)
+                    if let inspection = recovery.inspection {
+                        Text(inspection.summary)
+                        Text(inspection.guidance).foregroundStyle(.secondary)
+                        if let copy = inspection.workingCopy {
+                            Text(copy.repositoryURL).foregroundStyle(.secondary).textSelection(.enabled)
+                        }
+                    } else if let error = recovery.error {
+                        Text("目录检查失败：\(error)").foregroundStyle(.red).textSelection(.enabled)
+                        Text("请在访达中检查保留的内容；修正错误后可重新检查目录。")
+                    } else {
+                        Text("正在检查残留目录…")
+                    }
+                    HStack {
+                        Button("在访达中显示") {
+                            NSWorkspace.shared.activateFileViewerSelecting([recovery.destination])
+                        }
+                        Button("重新检查") { model.recheckCheckout() }
+                        if recovery.inspection?.workingCopy != nil {
+                            Button("打开并检查") { model.open(recovery.destination) }
+                        }
+                        Spacer()
+                        Button("收起提示") { model.checkoutRecovery = nil }
+                    }
+                    .disabled(model.isBusy)
+                }
+                .font(.caption)
+                .padding(.bottom, 12)
+            }
+            if let progress = model.writeProgress, model.checkoutProgress == nil {
                 TimelineView(.periodic(from: progress.startedAt, by: 1)) { context in
                     VStack(alignment: .leading, spacing: 5) {
                         HStack {
@@ -539,18 +571,17 @@ struct ContentView: View {
                 .padding(.bottom, 12)
             }
             if showOutput {
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        Text(model.result).font(.system(size: 11, design: .monospaced)).textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        Color.clear.frame(height: 1).id("output-end")
-                    }
-                    .onChange(of: model.result) { _, _ in
-                        if model.checkoutProgress != nil || model.writeProgress != nil {
-                            proxy.scrollTo("output-end", anchor: .bottom)
-                        }
+                HStack {
+                    Toggle("跟随最新输出", isOn: $followsOutput).toggleStyle(.checkbox)
+                    Spacer()
+                    Button("复制完整输出") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(model.result, forType: .string)
                     }
                 }
+                .font(.caption)
+                .padding(.bottom, 6)
+                OperationOutputView(text: model.result, followsOutput: followsOutput)
                 .frame(height: 100)
                 .padding(.bottom, 12)
             }

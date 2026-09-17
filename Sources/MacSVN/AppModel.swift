@@ -10,6 +10,12 @@ struct CheckoutProgress {
     var isOpeningWorkingCopy = false
 }
 
+struct CheckoutRecovery {
+    let destination: URL
+    var inspection: CheckoutInspection?
+    var error: String?
+}
+
 enum HistoryState {
     case idle
     case loading
@@ -89,6 +95,7 @@ final class AppModel: ObservableObject {
     @Published var showIgnored = false
     @Published var showHistory = false
     @Published private(set) var checkoutProgress: CheckoutProgress?
+    @Published var checkoutRecovery: CheckoutRecovery?
     @Published private(set) var writeProgress: WriteOperationProgress?
     @Published var revertPlan: RevertPlan?
     @Published var directoryIgnoreDraft: DirectoryIgnoreDraft?
@@ -399,66 +406,92 @@ final class AppModel: ObservableObject {
     private func receiveLiveOutput(
         _ action: (@escaping @Sendable (String) -> Void) async throws -> String
     ) async throws {
-        let (stream, continuation) = AsyncStream<String>.makeStream()
+        let output = CommandOutputStream()
         let reader = Task { @MainActor in
-            for await text in stream {
+            for await text in output.stream {
                 self.result += text
                 self.writeProgress?.lastOutputAt = Date()
             }
         }
         do {
-            _ = try await action { continuation.yield($0) }
-            continuation.finish()
+            _ = try await action { output.append($0) }
+            output.finish()
             await reader.value
         } catch {
-            continuation.finish()
+            output.finish()
             await reader.value
             throw error
         }
     }
 
     func checkout(repository: String, destination: URL) {
-        perform("检出仓库") {
+        perform(
+            "检出仓库", streamOutput: true,
+            cancellationMessage: "检出已中断，已下载内容保留在：\(destination.path)。请检查目标目录后决定如何继续。"
+        ) {
             let client = try self.client(for: repository)
+            self.checkoutRecovery = nil
             self.checkoutProgress = CheckoutProgress()
             self.result = "正在连接仓库，检出到：\(destination.path)\n"
             // 先消费完输出再发布完成/失败，避免后台回调覆盖终态或下一次操作。
-            let (stream, continuation) = AsyncStream<String>.makeStream()
+            let stream = CommandOutputStream()
             let reader = Task { @MainActor in
-                for await text in stream {
+                for await text in stream.stream {
                     self.receiveCheckoutOutput(text)
                 }
             }
             let output: String
             do {
                 output = try await client.checkout(repository: repository, destination: destination) { text in
-                    continuation.yield(text)
+                    stream.append(text)
                 }
-                continuation.finish()
+                stream.finish()
                 await reader.value
             } catch {
-                continuation.finish()
+                stream.finish()
                 await reader.value
-                if error is CancellationError {
-                    throw SVNError("检出已中断；已下载内容保留在目标目录：\(destination.path)\n\n\(self.result)")
+                // 取消的任务不能继续启动 SVN；独立只读检查完成后再发布原操作终态。
+                let inspection = Task { @MainActor in
+                    await self.inspectCheckout(destination: destination, client: client)
                 }
+                await inspection.value
                 throw error
             }
             self.checkoutProgress?.isOpeningWorkingCopy = true
             self.operation = "打开检出的工作副本"
-            let copy = try await client.workingCopy(at: destination)
-            let entries = try await client.status(at: copy.root)
-            self.workingCopy = copy
-            self.entries = entries
-            self.selectedPaths = []
-            self.focusedPath = nil
-            self.diffText = "选择一个文件查看差异"
-            self.resetHistory()
-            self.message = ""
-            self.showHistory = false
-            self.remember(copy.root)
-            self.rememberRepository(copy.repositoryURL)
+            self.writeProgress?.phase = .completed
+            self.writeProgress?.finishedAt = Date()
+            do {
+                // 与打开副本共用草稿保存流程，检出新副本不会丢弃旧副本的提交说明和选择。
+                _ = try await self.readWorkingCopy(at: destination)
+            } catch {
+                let inspection = Task { @MainActor in
+                    await self.inspectCheckout(destination: destination, client: client)
+                }
+                await inspection.value
+                throw SVNError("下载已完成，但打开工作副本失败，请检查目录后重新打开。\n\(error.localizedDescription)")
+            }
             self.result = "检出完成，已打开：\(destination.path)\n\n\(self.formatCheckoutOutput(output))"
+        }
+    }
+
+    /// 保留检出错误及输出；目录检查失败单独展示，不将失败伪装为可恢复的工作副本。
+    private func inspectCheckout(destination: URL, client: SVNClient) async {
+        checkoutRecovery = CheckoutRecovery(destination: destination)
+        do {
+            let inspection = try await client.inspectCheckout(at: destination)
+            checkoutRecovery?.inspection = inspection
+            result += "\n目录检查：\(inspection.summary)\n\(inspection.guidance)\n"
+        } catch {
+            checkoutRecovery?.error = error.localizedDescription
+            result += "\n目录检查失败：\(error.localizedDescription)\n"
+        }
+    }
+
+    func recheckCheckout() {
+        guard let recovery = checkoutRecovery else { return }
+        perform("检查检出目录") {
+            await self.inspectCheckout(destination: recovery.destination, client: try self.client())
         }
     }
 

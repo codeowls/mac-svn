@@ -20,6 +20,13 @@ public struct RepositoryLocation: Sendable, Equatable {
     public let revision: String
 }
 
+public struct CheckoutInspection: Sendable {
+    public let directory: URL
+    public let workingCopy: WorkingCopy?
+    public let summary: String
+    public let guidance: String
+}
+
 public struct StatusEntry: Identifiable, Sendable, Equatable {
     public var id: String { path }
     public let path: String
