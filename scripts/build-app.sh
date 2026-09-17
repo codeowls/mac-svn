@@ -11,21 +11,30 @@ MACOS_SDK_PATH="$(xcrun --sdk macosx --show-sdk-path)"
 MACOS_SDK_VERSION="$(xcrun --sdk macosx --show-sdk-version)"
 BUILD_ARGS=(-c release --sdk "$MACOS_SDK_PATH")
 case "${1:-}" in
-    "") ;;
-    --universal) BUILD_ARGS+=(--arch arm64 --arch x86_64) ;;
+    "") ARCHITECTURES=("$(uname -m)") ;;
+    --universal) ARCHITECTURES=(arm64 x86_64) ;;
     *) printf 'Usage: bash scripts/build-app.sh [--universal]\n' >&2; exit 1 ;;
 esac
 # Keep the linked SDK distinct from the macOS 14 deployment target in Package.swift.
 # SwiftPM with Command Line Tools can otherwise mark both as 14 and retain legacy UI.
-swift build "${BUILD_ARGS[@]}" \
-    -Xlinker -platform_version -Xlinker macos \
-    -Xlinker 14.0 -Xlinker "$MACOS_SDK_VERSION"
+# Build each slice separately: Xcode 16's multi-architecture SwiftPM backend
+# forwards linker flags to clang differently from its single-architecture backend.
+BINARIES=()
+for architecture in "${ARCHITECTURES[@]}"; do
+    swift build "${BUILD_ARGS[@]}" --arch "$architecture" \
+        -Xlinker -platform_version -Xlinker macos \
+        -Xlinker 14.0 -Xlinker "$MACOS_SDK_VERSION"
+    BIN_DIR="$(swift build "${BUILD_ARGS[@]}" --arch "$architecture" --show-bin-path)"
+    SLICE_DIR="$PWD/.build/release-slices/$architecture"
+    mkdir -p "$SLICE_DIR"
+    cp "$BIN_DIR/MacSVN" "$SLICE_DIR/MacSVN"
+    BINARIES+=("$SLICE_DIR/MacSVN")
+done
 bash scripts/build-icon.sh
 
 APP_DIR="$PWD/dist/Mac SVN.app"
 mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
-BIN_DIR="$(swift build "${BUILD_ARGS[@]}" --show-bin-path)"
-cp "$BIN_DIR/MacSVN" "$APP_DIR/Contents/MacOS/MacSVN"
+lipo -create "${BINARIES[@]}" -output "$APP_DIR/Contents/MacOS/MacSVN"
 cp "$PWD/assets/AppIcon.icns" "$APP_DIR/Contents/Resources/AppIcon.icns"
 cp "$PWD/LICENSE" "$APP_DIR/Contents/Resources/LICENSE"
 cat > "$APP_DIR/Contents/Info.plist" <<PLIST
