@@ -69,7 +69,7 @@ struct HistoricalDiffView: View {
                 failure = error.localizedDescription
             }
         }
-        .background(HistoricalExportWindowReader { exportWindow = $0 })
+        .background(ViewWindowReader { exportWindow = $0 })
         .onDisappear { exportTask?.cancel() }
     }
 
@@ -155,31 +155,6 @@ struct HistoricalDiffView: View {
             } catch {
                 exportFailed = true
                 exportMessage = error.localizedDescription
-            }
-        }
-    }
-}
-
-/// 绑定实际承载视图的窗口；后台或辅助功能触发按钮时，App 的 keyWindow 可能为空。
-private struct HistoricalExportWindowReader: NSViewRepresentable {
-    let onChange: (NSWindow?) -> Void
-
-    func makeNSView(context: Context) -> WindowView {
-        let view = WindowView()
-        view.onChange = onChange
-        return view
-    }
-
-    func updateNSView(_ nsView: WindowView, context: Context) {}
-
-    final class WindowView: NSView {
-        var onChange: ((NSWindow?) -> Void)?
-
-        override func viewDidMoveToWindow() {
-            super.viewDidMoveToWindow()
-            DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                onChange?(window)
             }
         }
     }

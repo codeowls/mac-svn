@@ -8,6 +8,7 @@ struct CheckoutView: View {
     @Environment(\.dismiss) private var dismiss
     @ViewState private var destination: URL?
     @ViewState private var showLogin = false
+    @ViewState private var panelWindow: NSWindow?
 
     private var checkoutUnavailableReason: String? {
         if model.isBusy {
@@ -108,6 +109,7 @@ struct CheckoutView: View {
         }
         .padding(28)
         .frame(width: 660)
+        .background(ViewWindowReader { panelWindow = $0 })
         .sheet(isPresented: $showLogin) {
             RepositoryLoginView(model: model, repository: browser.checkoutURL) {
                 withClient { browser.browse(using: $0) }
@@ -193,6 +195,10 @@ struct CheckoutView: View {
 
     /// 所选目录就是检出目标，支持在系统选择器内新建空文件夹。
     private func chooseDestination() {
+        guard let window = panelWindow else {
+            browser.report(SVNError("未能定位检出窗口，请关闭后重新打开。"))
+            return
+        }
         let panel = NSOpenPanel()
         panel.title = "选择工作副本的保存位置"
         panel.prompt = "选择"
@@ -203,7 +209,7 @@ struct CheckoutView: View {
         panel.allowsMultipleSelection = false
         panel.directoryURL = destination
         // 使用异步面板，避免新建文件夹弹窗与检出表单嵌套同步模态循环。
-        panel.begin { response in
+        panel.beginSheetModal(for: window) { response in
             if response == .OK {
                 destination = panel.url
             }
