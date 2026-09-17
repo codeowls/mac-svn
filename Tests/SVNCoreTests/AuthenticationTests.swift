@@ -106,6 +106,17 @@ struct AuthenticationTests {
         #expect(writerHistory.count == 1)
         #expect(readerHistory.first?.changedPaths.first?.path == "/中文文件.txt")
         #expect(readerHistory.first?.changedPaths.first?.action == "A")
+        let fileHistory = try await reader.historyPage(at: readerCopy, path: "中文文件.txt")
+        #expect(fileHistory.entries.map(\.revision) == readerHistory.map(\.revision))
+        let changedPath = try #require(readerHistory.first?.changedPaths.first)
+        let historicalDiff = try await reader.historicalDiff(change: changedPath, revision: "1", at: readerCopy)
+        #expect(historicalDiff.text.contains("+authenticated content"))
+        await #expect(throws: SVNError.self) {
+            try await anonymous.historicalDiff(change: changedPath, revision: "1", at: workingCopy)
+        }
+        await #expect(throws: SVNError.self) {
+            try await anonymous.historyPage(at: workingCopy, path: "中文文件.txt")
+        }
         _ = try await writer.update(at: workingCopy)
         // 与首次登录相同的独立 realm 不应留下密码缓存；无凭据访问依旧失败。
         await #expect(throws: SVNError.self) {

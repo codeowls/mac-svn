@@ -5,3 +5,37 @@ dist/
 *.xcuserstate
 xcuserdata/
 .env
+
+# Local IDE, assistant, and working-copy metadata
+.idea/
+.vscode/
+*.iml
+.codex/
+.agents/
+.claude/
+.svn/
+
+# Local notes stay private; explicitly allow reviewed public documentation.
+*.md
+!/README.md
+!/assets/README.md
+/assets/AppIcon.prompt.txt
+
+# Local credentials and signing material
+.env.*
+!.env.example
+!.env.template
+*.pem
+*.key
+*.p12
+*.pfx
+*.mobileprovision
+
+# Runtime and verification artifacts
+*.log
+*.xcresult/
+coverage/
+test-results*.xml
+mac-svn-tests-*/
+mac-svn-auth-*/
+mac-svn-acceptance-*/

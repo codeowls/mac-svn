@@ -163,6 +163,30 @@ struct XMLTests {
         #expect(!connection.requiresAuthentication)
         #expect(connection.message.contains("Connection refused"))
     }
+
+    @Test func historyFiltersCombineFieldsAndKeepMultilineMessages() throws {
+        let logs = try SVNXML.log("""
+        <log>
+          <logentry revision="3"><author>Alice</author><msg>修复界面
+        第二行 Details</msg><paths><path action="M">/目录/中文 @ File.txt</path></paths></logentry>
+          <logentry revision="2"><author>Bob</author><msg>修复界面</msg><paths><path action="M">/other.txt</path></paths></logentry>
+          <logentry revision="1"><msg>初始化</msg></logentry>
+        </log>
+        """)
+        var filter = HistoryFilter()
+        #expect(logs.filter(filter.matches).count == 3)
+        filter.author = " alice "
+        filter.message = "details"
+        filter.path = "中文 @ file"
+        #expect(logs.filter(filter.matches).map(\.revision) == ["3"])
+        filter.author = "Bob"
+        #expect(logs.filter(filter.matches).isEmpty)
+        filter.author = " "
+        filter.message = "\n"
+        filter.path = " "
+        #expect(filter.isEmpty)
+        #expect(logs.filter(filter.matches).count == 3)
+    }
 }
 
 private struct Fixture {
@@ -207,6 +231,258 @@ private struct Fixture {
 
 @Suite("真实本地 SVN 仓库集成")
 struct IntegrationTests {
+    @Test func historicalDiffPreservesRevisionSemanticsAndLocalChanges() async throws {
+        let f = try await Fixture.create()
+        let name = "-中文 @ & file.txt"
+        try f.write(name, "original\n")
+        try f.write("deleted.txt", "delete me\n")
+        try f.write("replaced.txt", "old node\n")
+        try FileManager.default.createDirectory(at: f.first.appendingPathComponent("folder"), withIntermediateDirectories: false)
+        try f.write("folder/child.txt", "child\n")
+        try Data([0, 1, 2]).write(to: f.first.appendingPathComponent("binary.dat"))
+        try await f.svn(["add", "--force", "--", "."])
+        try await f.svn(["propset", "svn:mime-type", "application/octet-stream", "binary.dat"])
+        try await f.svn(["commit", "--message", "initial"])
+        let initial = try #require(try await f.client.history(at: f.first).first)
+        let added = try #require(initial.changedPaths.first { $0.path == "/" + name })
+        let addition = try await f.client.historicalDiff(change: added, revision: "1", at: f.first)
+        #expect(addition.oldLabel.contains("r0（不存在）"))
+        #expect(addition.text.contains("+original"))
+
+        try f.write(name, "modified\n")
+        try f.write("folder/child.txt", "changed child\n")
+        try await f.svn(["propset", "test:note", "directory property", "folder"])
+        try Data([0, 3, 4]).write(to: f.first.appendingPathComponent("binary.dat"))
+        try await f.svn(["delete", "--keep-local", "replaced.txt"])
+        try f.write("replaced.txt", "replacement\n")
+        try await f.svn(["add", "replaced.txt"])
+        try await f.svn(["copy", "--", "./\(name)@", "./copy @.txt@"])
+        try await f.svn(["commit", "--message", "modify, copy and replace"])
+        let changed = try #require(try await f.client.history(at: f.first).first)
+        let modified = try #require(changed.changedPaths.first { $0.path == "/" + name })
+        let copied = try #require(changed.changedPaths.first { $0.path == "/copy @.txt" })
+        let replaced = try #require(changed.changedPaths.first { $0.path == "/replaced.txt" })
+        let directory = try #require(changed.changedPaths.first { $0.path == "/folder" })
+        let binary = try #require(changed.changedPaths.first { $0.path == "/binary.dat" })
+        try f.write(name, "uncommitted local content\n")
+        let before = try await f.client.status(at: f.first)
+        let modification = try await f.client.historicalDiff(change: modified, revision: "2", at: f.first)
+        #expect(modification.text.contains("-original") && modification.text.contains("+modified"))
+        #expect(!modification.text.contains("uncommitted"))
+        let copy = try await f.client.historicalDiff(change: copied, revision: "2", at: f.first)
+        #expect(copy.oldLabel.contains("r1（复制来源）"))
+        #expect(copy.text.contains("-original") && copy.text.contains("+modified"))
+        let replacement = try await f.client.historicalDiff(change: replaced, revision: "2", at: f.first)
+        #expect(replacement.text.contains("-old node") && replacement.text.contains("+replacement"))
+        let property = try await f.client.historicalDiff(change: directory, revision: "2", at: f.first)
+        #expect(property.text.contains("test:note"))
+        #expect(!property.text.contains("changed child"))
+        let binaryDiff = try await f.client.historicalDiff(change: binary, revision: "2", at: f.first)
+        #expect(binaryDiff.text.contains("Cannot display") && binaryDiff.text.contains("binary"))
+        #expect(try await f.client.status(at: f.first) == before)
+
+        try await f.svn(["delete", "--keep-local", "deleted.txt"])
+        try await f.svn(["commit", "--message", "delete", "deleted.txt"])
+        let deletionLog = try #require(try await f.client.history(at: f.first).first)
+        let deleted = try #require(deletionLog.changedPaths.first)
+        let deletion = try await f.client.historicalDiff(change: deleted, revision: "3", at: f.first)
+        #expect(deletion.newLabel.contains("已删除"))
+        #expect(deletion.text.contains("-delete me"))
+        #expect(try String(contentsOf: f.first.appendingPathComponent(name), encoding: .utf8) == "uncommitted local content\n")
+    }
+
+    @Test func revertChecksSnapshotAndKeepsUnselectedChanges() async throws {
+        let f = try await Fixture.create()
+        let name = "-还原 @ 文件.txt"
+        try f.write(name, "base\n")
+        try f.write("keep.txt", "base\n")
+        try FileManager.default.createDirectory(at: f.first.appendingPathComponent("folder"), withIntermediateDirectories: false)
+        try f.write("folder/child.txt", "base\n")
+        try await f.svn(["add", "--force", "--", "."])
+        try await f.svn(["commit", "--message", "initial"])
+        try f.write(name, "reviewed content\n")
+        try f.write("keep.txt", "keep local\n")
+        let stale = try await f.client.prepareRevert(paths: [name], at: f.first)
+        #expect(stale.items.first?.preview.contains("+reviewed content") == true)
+        try f.write(name, "changed after review\n")
+        await #expect(throws: SVNError.self) { try await f.client.revert(stale) }
+        #expect(try String(contentsOf: f.first.appendingPathComponent(name), encoding: .utf8) == "changed after review\n")
+        let plan = try await f.client.prepareRevert(paths: [name], at: f.first)
+        _ = try await f.client.revert(plan)
+        #expect(try String(contentsOf: f.first.appendingPathComponent(name), encoding: .utf8) == "base\n")
+        #expect(try String(contentsOf: f.first.appendingPathComponent("keep.txt"), encoding: .utf8) == "keep local\n")
+
+        try f.write("folder/child.txt", "keep child\n")
+        try await f.svn(["propset", "test:note", "discard", "folder"])
+        let directory = try await f.client.prepareRevert(paths: ["folder"], at: f.first)
+        #expect(directory.items.first?.isDirectory == true)
+        _ = try await f.client.revert(directory)
+        #expect(try String(contentsOf: f.first.appendingPathComponent("folder/child.txt"), encoding: .utf8) == "keep child\n")
+        #expect(try await f.client.status(at: f.first).contains { $0.path == "folder" } == false)
+
+        try FileManager.default.createDirectory(at: f.first.appendingPathComponent("new folder"), withIntermediateDirectories: false)
+        try f.write("new folder/child.txt", "keep added file\n")
+        try await f.svn(["add", "new folder"])
+        await #expect(throws: SVNError.self) {
+            try await f.client.prepareRevert(paths: ["new folder"], at: f.first)
+        }
+        let addition = try await f.client.prepareRevert(paths: ["new folder", "new folder/child.txt"], at: f.first)
+        _ = try await f.client.revert(addition)
+        #expect(try String(contentsOf: f.first.appendingPathComponent("new folder/child.txt"), encoding: .utf8) == "keep added file\n")
+        #expect(try await f.client.status(at: f.first).first { $0.path == "new folder" }?.item == "unversioned")
+    }
+
+    @Test func revertRestoresMissingDeletedReplacedAndRemovesCopiedFile() async throws {
+        let f = try await Fixture.create()
+        for name in ["missing.txt", "deleted.txt", "replaced.txt", "source.txt"] {
+            try f.write(name, "base \(name)\n")
+        }
+        try await f.svn(["add", "--force", "--", "."])
+        try await f.svn(["commit", "--message", "initial"])
+        try FileManager.default.removeItem(at: f.first.appendingPathComponent("missing.txt"))
+        try await f.svn(["delete", "deleted.txt"])
+        try await f.svn(["delete", "--keep-local", "replaced.txt"])
+        try f.write("replaced.txt", "replacement\n")
+        try await f.svn(["add", "replaced.txt"])
+        try await f.svn(["copy", "source.txt", "copied.txt"])
+        try f.write("copied.txt", "copy modifications\n")
+        let plan = try await f.client.prepareRevert(
+            paths: ["missing.txt", "deleted.txt", "replaced.txt", "copied.txt"], at: f.first
+        )
+        #expect(plan.items.first { $0.entry.path == "copied.txt" }?.effect.contains("删除") == true)
+        _ = try await f.client.revert(plan)
+        for name in ["missing.txt", "deleted.txt", "replaced.txt", "source.txt"] {
+            #expect(try String(contentsOf: f.first.appendingPathComponent(name), encoding: .utf8) == "base \(name)\n")
+        }
+        #expect(!FileManager.default.fileExists(atPath: f.first.appendingPathComponent("copied.txt").path))
+        #expect(try await f.client.status(at: f.first).isEmpty)
+    }
+
+    @Test func revertRejectsChangedBinaryPropertiesAndStructuralDirectories() async throws {
+        let f = try await Fixture.create()
+        try Data([0, 1, 2]).write(to: f.first.appendingPathComponent("binary.dat"))
+        try FileManager.default.createDirectory(at: f.first.appendingPathComponent("folder"), withIntermediateDirectories: false)
+        try f.write("folder/child.txt", "base\n")
+        try await f.svn(["add", "--force", "--", "."])
+        try await f.svn(["propset", "svn:mime-type", "application/octet-stream", "binary.dat"])
+        try await f.svn(["commit", "--message", "initial"])
+        try Data([0, 3, 4]).write(to: f.first.appendingPathComponent("binary.dat"))
+        let binary = try await f.client.prepareRevert(paths: ["binary.dat"], at: f.first)
+        try Data([0, 5, 6]).write(to: f.first.appendingPathComponent("binary.dat"))
+        await #expect(throws: SVNError.self) { try await f.client.revert(binary) }
+        #expect(try Data(contentsOf: f.first.appendingPathComponent("binary.dat")) == Data([0, 5, 6]))
+        let property = try await f.client.prepareRevert(paths: ["binary.dat"], at: f.first)
+        try await f.svn(["propset", "test:note", "after confirmation", "binary.dat"])
+        await #expect(throws: SVNError.self) { try await f.client.revert(property) }
+        try await f.svn(["copy", "folder", "copied-folder"])
+        await #expect(throws: SVNError.self) {
+            try await f.client.prepareRevert(paths: ["copied-folder"], at: f.first)
+        }
+        try await f.svn(["delete", "folder"])
+        await #expect(throws: SVNError.self) {
+            try await f.client.prepareRevert(paths: ["folder"], at: f.first)
+        }
+        await #expect(throws: SVNError.self) {
+            try await f.client.prepareRevert(paths: ["../outside"], at: f.first)
+        }
+    }
+
+    @Test func commitAndUpdateStreamRealSVNOutput() async throws {
+        let f = try await Fixture.create()
+        try f.write("stream.txt", "first\n")
+        _ = try await f.client.add(paths: ["stream.txt"], at: f.first)
+        let (commitStream, commitContinuation) = AsyncStream<String>.makeStream()
+        let committing = Task {
+            defer { commitContinuation.finish() }
+            return try await f.client.commit(paths: ["stream.txt"], message: "streamed commit", at: f.first) {
+                commitContinuation.yield($0)
+            }
+        }
+        var commitOutput = ""
+        for await text in commitStream { commitOutput += text }
+        let commitResult = try await committing.value
+        #expect(commitOutput == commitResult)
+        #expect(commitOutput.contains("Committed revision 1"))
+
+        let (updateStream, updateContinuation) = AsyncStream<String>.makeStream()
+        let updating = Task {
+            defer { updateContinuation.finish() }
+            return try await f.client.update(at: f.second) { updateContinuation.yield($0) }
+        }
+        var updateOutput = ""
+        for await text in updateStream { updateOutput += text }
+        let updateResult = try await updating.value
+        #expect(updateOutput == updateResult)
+        #expect(updateOutput.contains("stream.txt") && updateOutput.contains("revision 1"))
+        #expect(try String(contentsOf: f.second.appendingPathComponent("stream.txt"), encoding: .utf8) == "first\n")
+    }
+
+    @Test func historyPagesBeyondFiftyAndKeepsCursorWhenHeadChanges() async throws {
+        let f = try await Fixture.create()
+        try f.write("history.txt", "1\n")
+        _ = try await f.client.add(paths: ["history.txt"], at: f.first)
+        for revision in 1...55 {
+            try f.write("history.txt", "\(revision)\n")
+            try await f.svn(["commit", "--message", "历史 \(revision)"])
+        }
+        let first = try await f.client.historyPage(at: f.first)
+        #expect(first.entries.map(\.revision) == (6...55).reversed().map(String.init))
+        #expect(first.nextBeforeRevision == 6)
+
+        try f.write("history.txt", "56\n")
+        try await f.svn(["commit", "--message", "分页期间新增"])
+        let second = try await f.client.historyPage(at: f.first, beforeRevision: first.nextBeforeRevision)
+        #expect(second.entries.map(\.revision) == ["5", "4", "3", "2", "1"])
+        #expect(second.nextBeforeRevision == nil)
+        #expect(Set((first.entries + second.entries).map(\.revision)).count == 55)
+        let reloaded = try await f.client.historyPage(at: f.first)
+        #expect(reloaded.entries.first?.revision == "56")
+        #expect(try await f.client.status(at: f.first).isEmpty)
+    }
+
+    @Test func fileHistoryPagesFollowCopiesAndSkipUnrelatedRevisions() async throws {
+        let f = try await Fixture.create()
+        let source = "中文 @ & file.txt"
+        let copied = "-复制 @ file.txt"
+        try f.write(source, "original\n")
+        _ = try await f.client.add(paths: [source], at: f.first)
+        try await f.svn(["commit", "--message", "原始文件"])
+        try f.write("other.txt", "unrelated\n")
+        _ = try await f.client.add(paths: ["other.txt"], at: f.first)
+        try await f.svn(["commit", "--message", "无关文件"])
+        try f.write(source, "modified\n")
+        try await f.svn(["commit", "--message", "修改源文件"])
+        try await f.svn(["copy", "--", "./\(source)@", "./\(copied)@"])
+        try await f.svn(["commit", "--message", "保留历史复制"])
+        try f.write(copied, "local uncommitted\n")
+        let before = try await f.client.status(at: f.first)
+
+        let first = try await f.client.historyPage(at: f.first, path: copied, pageSize: 2)
+        #expect(first.entries.map(\.revision) == ["4", "3"])
+        #expect(first.entries.first?.changedPaths.first?.copyFromPath == "/" + source)
+        let second = try await f.client.historyPage(
+            at: f.first, path: copied, beforeRevision: first.nextBeforeRevision, pageSize: 2
+        )
+        #expect(second.entries.map(\.revision) == ["1"])
+        #expect(second.nextBeforeRevision == nil)
+        let exactPage = try await f.client.historyPage(at: f.first, path: source, pageSize: 2)
+        #expect(exactPage.entries.map(\.revision) == ["3", "1"])
+        #expect(exactPage.nextBeforeRevision == nil)
+        #expect(try await f.client.status(at: f.first) == before)
+        #expect(try String(contentsOf: f.first.appendingPathComponent(copied), encoding: .utf8) == "local uncommitted\n")
+        await #expect(throws: SVNError.self) {
+            try await f.client.historyPage(at: f.first, path: "../outside")
+        }
+        await #expect(throws: SVNError.self) {
+            try await f.client.historyPage(at: f.first, path: "missing.txt")
+        }
+        let nested = f.first.appendingPathComponent("nested-copy")
+        _ = try await f.client.checkout(repository: f.repository.absoluteString, destination: nested)
+        await #expect(throws: SVNError.self) {
+            try await f.client.historyPage(at: f.first, path: "nested-copy/\(copied)")
+        }
+    }
+
     @Test func globalIgnoresHideOnlyUnversionedItems() async throws {
         let f = try await Fixture.create()
         let baseline = SVNClient(executable: f.client.executable, globalIgnores: "")

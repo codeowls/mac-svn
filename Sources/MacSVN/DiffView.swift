@@ -4,6 +4,29 @@ import SVNCore
 
 struct DiffView: View {
     @ObservedObject var model: AppModel
+
+    var body: some View {
+        DiffContentView(
+            title: model.focusedPath ?? "文件差异",
+            subtitle: model.entries.first { $0.path == model.focusedPath }?.label ?? "文件差异",
+            text: model.diffText,
+            oldLabel: "原版本 · BASE",
+            newLabel: "本地工作副本",
+            footer: "对比本地基准版本与当前内容 · 不会修改文件",
+            fileURL: model.focusedPath.flatMap { model.workingCopy?.root.appendingPathComponent($0) }
+        )
+    }
+}
+
+/// 本地与历史差异共用渲染，版本标签由各自的实际比较对象提供。
+struct DiffContentView: View {
+    let title: String
+    let subtitle: String
+    let text: String
+    let oldLabel: String
+    let newLabel: String
+    let footer: String
+    var fileURL: URL? = nil
     @Environment(\.dismiss) private var dismiss
     @ViewState private var sideBySide = false
     @ViewState private var document = UnifiedDiff("")
@@ -49,8 +72,8 @@ struct DiffView: View {
                 Divider()
                 if sideBySide && !document.hunkIDs.isEmpty {
                     HStack {
-                        Text("原版本 · BASE").frame(maxWidth: .infinity, alignment: .leading)
-                        Text("本地工作副本").frame(maxWidth: .infinity, alignment: .leading)
+                        Text(oldLabel).frame(maxWidth: .infinity, alignment: .leading)
+                        Text(newLabel).frame(maxWidth: .infinity, alignment: .leading)
                     }
                     .font(.caption.weight(.medium))
                     .padding(.horizontal, 16).padding(.vertical, 8)
@@ -60,7 +83,7 @@ struct DiffView: View {
                     let width = columnWidth(available: geometry.size.width)
                     if document.hunkIDs.isEmpty {
                         ScrollView {
-                            Text(model.diffText)
+                            Text(text)
                                 .textSelection(.enabled)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .padding(24)
@@ -96,7 +119,7 @@ struct DiffView: View {
             }
             Divider()
             HStack {
-                Text("对比本地基准版本与当前内容 · 不会修改文件")
+                Text(footer)
                     .font(.caption).foregroundStyle(.secondary)
                 Spacer()
                 Button("关闭") { dismiss() }.keyboardShortcut(.cancelAction)
@@ -105,26 +128,26 @@ struct DiffView: View {
         }
         .frame(minWidth: 850, idealWidth: 1050, minHeight: 540, idealHeight: 680)
         .onAppear { updateDocument() }
-        .onChange(of: model.diffText) { _, _ in updateDocument() }
+        .onChange(of: text) { _, _ in updateDocument() }
     }
 
     private var header: some View {
         HStack(spacing: 12) {
             Image(systemName: "doc.text.magnifyingglass").font(.title2).foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: 4) {
-                Text(model.focusedPath ?? "文件差异")
+                Text(title)
                     .font(.headline).lineLimit(2).textSelection(.enabled)
-                Text(model.entries.first { $0.path == model.focusedPath }?.label ?? "文件差异")
+                Text(subtitle)
                     .font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
             Button("复制差异") {
                 NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(model.diffText, forType: .string)
+                NSPasteboard.general.setString(text, forType: .string)
             }
-            if let path = model.focusedPath, let copy = model.workingCopy {
+            if let fileURL {
                 Button("在 Finder 中显示") {
-                    NSWorkspace.shared.activateFileViewerSelecting([copy.root.appendingPathComponent(path)])
+                    NSWorkspace.shared.activateFileViewerSelecting([fileURL])
                 }
             }
         }
@@ -132,7 +155,7 @@ struct DiffView: View {
     }
 
     private func updateDocument() {
-        document = UnifiedDiff(model.diffText)
+        document = UnifiedDiff(text)
         hunkIndex = 0
     }
 

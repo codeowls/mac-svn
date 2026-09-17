@@ -1,0 +1,45 @@
+name: Build and test
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: macos-15
+    timeout-minutes: 20
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_16.4.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install Subversion
+        run: brew install subversion
+
+      - name: Report toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+          svn --version --quiet
+          svnadmin --version --quiet
+
+      - name: Run isolated SVN integration tests
+        run: swift test --enable-swift-testing --xunit-output .build/test-results.xml
+
+      - name: Build app and verify local signature
+        run: |
+          bash scripts/build-app.sh
+          codesign --verify --deep --strict "dist/Mac SVN.app"
+
+      - name: Check whitespace
+        run: git diff --check

@@ -17,6 +17,23 @@ enum HistoryState {
     case failed(message: String, requiresAuthentication: Bool)
 }
 
+struct WriteOperationProgress {
+    enum Phase: String {
+        case running = "进行中"
+        case completed = "完成"
+        case failed = "失败"
+        case cancelled = "已取消"
+        case completedWithWarning = "操作已完成，状态刷新未完成"
+    }
+
+    let id = UUID()
+    let title: String
+    let startedAt = Date()
+    var lastOutputAt = Date()
+    var finishedAt: Date?
+    var phase: Phase = .running
+}
+
 @MainActor
 final class AppModel: ObservableObject {
     @Published var workingCopy: WorkingCopy?
@@ -27,6 +44,12 @@ final class AppModel: ObservableObject {
     @Published var logs: [LogEntry] = []
     @Published var selectedHistoryRevision: String?
     @Published private(set) var historyState: HistoryState = .idle
+    @Published private(set) var historyPath = "."
+    @Published var historyFilter = HistoryFilter()
+    @Published private(set) var nextHistoryRevision: Int?
+    @Published private(set) var isLoadingMoreHistory = false
+    @Published private(set) var historyPageError: String?
+    @Published private(set) var historyPageRequiresAuthentication = false
     @Published var message = ""
     @Published var operation = ""
     @Published var result = "欢迎使用 Mac SVN"
@@ -40,6 +63,8 @@ final class AppModel: ObservableObject {
     @Published var showIgnored = false
     @Published var showHistory = false
     @Published private(set) var checkoutProgress: CheckoutProgress?
+    @Published private(set) var writeProgress: WriteOperationProgress?
+    @Published var revertPlan: RevertPlan?
     @Published private(set) var authenticationStore = SVNAuthenticationStore()
     @Published private(set) var isAuthenticating = false
     private var operationTask: Task<Void, Never>?
@@ -47,12 +72,16 @@ final class AppModel: ObservableObject {
 
     var isBusy: Bool { !operation.isEmpty || isAuthenticating }
     var selectedEntries: [StatusEntry] { entries.filter { selectedPaths.contains($0.path) } }
+    var filteredLogs: [LogEntry] { logs.filter(historyFilter.matches) }
     var canCommit: Bool {
         !isBusy && !selectedEntries.isEmpty && selectedEntries.allSatisfy(\.canCommit)
             && !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
     var canAdd: Bool {
         !isBusy && !selectedEntries.isEmpty && selectedEntries.allSatisfy { $0.item == "unversioned" }
+    }
+    var canRevert: Bool {
+        !isBusy && !selectedEntries.isEmpty && selectedEntries.allSatisfy(\.canRevert)
     }
 
     func client(for repository: String? = nil) throws -> SVNClient {
@@ -141,14 +170,18 @@ final class AppModel: ObservableObject {
 
     func update(at directory: URL? = nil) {
         guard let directory = directory ?? workingCopy?.root else { return }
-        perform("更新工作副本", refreshAfterFailure: true) {
+        perform("更新工作副本", refreshAfterFailure: true, streamOutput: true) {
             let copy: WorkingCopy
             if let current = self.workingCopy, current.root == directory {
                 copy = current
             } else {
                 copy = try await self.readWorkingCopy(at: directory)
             }
-            self.result = try await self.client(for: copy.repositoryURL).update(at: copy.root)
+            let client = try self.client(for: copy.repositoryURL)
+            try await self.receiveLiveOutput { onOutput in
+                try await client.update(at: copy.root, onOutput: onOutput)
+            }
+            self.writeProgress?.phase = .completed
             try await self.reload()
             if self.entries.contains(where: \.isConflict) {
                 self.result += "\n更新产生冲突，请检查标记为冲突的文件。首版请使用外部工具解决冲突。"
@@ -177,8 +210,15 @@ final class AppModel: ObservableObject {
         guard let copy = workingCopy, canCommit else { return }
         let paths = selectedPaths.sorted()
         let commitMessage = message
-        perform("提交选中项目", refreshAfterFailure: true) {
-            self.result = try await self.client().commit(paths: paths, message: commitMessage, at: copy.root)
+        perform(
+            "提交选中项目", refreshAfterFailure: true, streamOutput: true,
+            cancellationMessage: "提交已取消；服务器结果未确认，请先查看仓库历史核实，勿直接重复提交。"
+        ) {
+            let client = try self.client()
+            try await self.receiveLiveOutput { onOutput in
+                try await client.commit(paths: paths, message: commitMessage, at: copy.root, onOutput: onOutput)
+            }
+            self.writeProgress?.phase = .completed
             self.message = ""
             self.selectedPaths = []
             do {
@@ -186,6 +226,50 @@ final class AppModel: ObservableObject {
             } catch {
                 throw SVNError("提交已成功，但重新读取工作副本失败，请勿重复提交。\n\n\(error.localizedDescription)")
             }
+        }
+    }
+
+    /// 在弹出确认窗口前读取实际状态和差异；确认清单绑定当前副本及内容快照。
+    func prepareRevert(paths: [String]? = nil) {
+        guard !isBusy, let copy = workingCopy else { return }
+        let paths = paths ?? selectedPaths.sorted()
+        perform("检查还原范围") {
+            let plan = try await self.client().prepareRevert(paths: paths, at: copy.root)
+            try Task.checkCancellation()
+            self.revertPlan = plan
+            self.result = "请检查 \(plan.items.count) 项还原内容，确认前不会修改文件。"
+        }
+    }
+
+    func confirmRevert(_ plan: RevertPlan) {
+        guard !isBusy, workingCopy?.root == plan.root, revertPlan?.id == plan.id else { return }
+        revertPlan = nil
+        perform("还原选中项目", refreshAfterFailure: true) {
+            self.result = try await self.client().revert(plan)
+            try await self.reload()
+            self.result = "还原完成\n\n" + self.result
+        }
+    }
+
+    /// 命令结束前持续消费双管道输出；发布终态前先排空日志，避免旧输出覆盖下一次操作。
+    private func receiveLiveOutput(
+        _ action: (@escaping @Sendable (String) -> Void) async throws -> String
+    ) async throws {
+        let (stream, continuation) = AsyncStream<String>.makeStream()
+        let reader = Task { @MainActor in
+            for await text in stream {
+                self.result += text
+                self.writeProgress?.lastOutputAt = Date()
+            }
+        }
+        do {
+            _ = try await action { continuation.yield($0) }
+            continuation.finish()
+            await reader.value
+        } catch {
+            continuation.finish()
+            await reader.value
+            throw error
         }
     }
 
@@ -254,32 +338,117 @@ final class AppModel: ObservableObject {
         }.joined(separator: "\n")
     }
 
-    /// 历史失败与空历史分开呈现；认证后只重试这一只读请求，不重放任何写操作。
-    func loadHistory() {
-        guard !isBusy, let copy = workingCopy else { return }
+    /// 新的历史入口重置目标与筛选；重新加载及认证重试保留当前查询范围。
+    func loadHistory(path: String = ".") {
+        guard !isBusy, workingCopy != nil else { return }
         showHistory = true
         resetHistory()
-        historyState = .loading
-        perform("读取最近 50 条历史", reportFailure: { error in
+        historyPath = path
+        reloadHistory()
+    }
+
+    func reloadHistory() {
+        guard !isBusy, workingCopy != nil else { return }
+        readHistoryPage(append: false)
+    }
+
+    func loadMoreHistory() {
+        guard !isBusy, workingCopy != nil, nextHistoryRevision != nil else { return }
+        readHistoryPage(append: true)
+    }
+
+    func retryHistory() {
+        if historyPageError != nil {
+            loadMoreHistory()
+        } else {
+            reloadHistory()
+        }
+    }
+
+    /// 每页成功后才替换列表和游标；续读失败或取消仍可浏览已读取的历史。
+    private func readHistoryPage(append: Bool) {
+        guard let copy = workingCopy else { return }
+        let path = historyPath
+        let cursor = append ? nextHistoryRevision : nil
+        let previousSelection = selectedHistoryRevision
+        if !append {
+            historyState = .loading
+        }
+        isLoadingMoreHistory = append
+        historyPageError = nil
+        historyPageRequiresAuthentication = false
+        perform(append ? "读取更早历史" : "读取最近 50 条历史", reportFailure: { error in
+            self.isLoadingMoreHistory = false
             let svnError = error as? SVNError
             let message = error is CancellationError ? "历史读取已取消，可重新加载。" : error.localizedDescription
-            self.historyState = .failed(
-                message: message,
-                requiresAuthentication: svnError?.requiresAuthentication == true
-            )
+            if append {
+                self.historyPageError = message
+                self.historyPageRequiresAuthentication = svnError?.requiresAuthentication == true
+            } else {
+                self.historyState = .failed(
+                    message: message,
+                    requiresAuthentication: svnError?.requiresAuthentication == true
+                )
+            }
             self.result = svnError?.diagnostic ?? message
         }) {
-            self.logs = try await self.client().history(at: copy.root)
-            self.selectedHistoryRevision = self.logs.first?.revision
+            let page = try await self.client(for: copy.repositoryURL).historyPage(
+                at: copy.root, path: path, beforeRevision: cursor
+            )
+            try Task.checkCancellation()
+            guard self.workingCopy?.root == copy.root, self.historyPath == path else { return }
+            self.logs = append ? self.logs + page.entries : page.entries
+            self.nextHistoryRevision = page.nextBeforeRevision
+            if !append {
+                self.selectedHistoryRevision = previousSelection
+            }
+            self.reconcileHistorySelection()
             self.historyState = .loaded
+            self.isLoadingMoreHistory = false
             self.result = "已读取 \(self.logs.count) 条历史记录"
         }
+    }
+
+    /// 筛选后同步右侧详情，避免继续展示已经隐藏的提交。
+    func reconcileHistorySelection() {
+        let visible = filteredLogs
+        if !visible.contains(where: { $0.revision == selectedHistoryRevision }) {
+            selectedHistoryRevision = visible.first?.revision
+        }
+    }
+
+    /// 从文件选择器读取干净文件的历史，查询目标必须位于当前工作副本内。
+    func chooseFileHistory() {
+        guard !isBusy, let copy = workingCopy else { return }
+        let panel = NSOpenPanel()
+        panel.title = "选择文件查看历史"
+        panel.prompt = "查看历史"
+        panel.message = "选择当前工作副本内已提交的文件；历史查询不会修改本地内容。"
+        panel.directoryURL = copy.root
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.allowsMultipleSelection = false
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        let root = copy.root.resolvingSymlinksInPath().path + "/"
+        let file = url.deletingLastPathComponent().resolvingSymlinksInPath()
+            .appendingPathComponent(url.lastPathComponent).path
+        guard file.hasPrefix(root) else {
+            errorMessage = "请选择当前工作副本内的文件。"
+            return
+        }
+        loadHistory(path: String(file.dropFirst(root.count)))
     }
 
     private func resetHistory() {
         logs = []
         selectedHistoryRevision = nil
         historyState = .idle
+        historyPath = "."
+        historyFilter = HistoryFilter()
+        nextHistoryRevision = nil
+        isLoadingMoreHistory = false
+        historyPageError = nil
+        historyPageRequiresAuthentication = false
     }
 
     /// Cancel the previous request and check identity so old diff results never overwrite new selections.
@@ -365,6 +534,8 @@ final class AppModel: ObservableObject {
         message = ""
         showHistory = false
         errorMessage = nil
+        revertPlan = nil
+        writeProgress = nil
         result = "欢迎使用 Mac SVN"
     }
 
@@ -393,7 +564,7 @@ final class AppModel: ObservableObject {
         let newInfo = try await client.workingCopy(at: copy.root)
         entries = newEntries
         workingCopy = newInfo
-        selectedPaths.formIntersection(Set(entries.filter { $0.canCommit || $0.item == "unversioned" }.map(\.path)))
+        selectedPaths.formIntersection(Set(entries.filter { $0.canCommit || $0.canRevert || $0.item == "unversioned" }.map(\.path)))
         resetHistory()
         loadDiff()
     }
@@ -402,12 +573,18 @@ final class AppModel: ObservableObject {
     private func perform(
         _ title: String,
         refreshAfterFailure: Bool = false,
+        streamOutput: Bool = false,
+        cancellationMessage: String? = nil,
         reportFailure: ((Error) -> Void)? = nil,
         action: @escaping @MainActor () async throws -> Void
     ) {
         guard !isBusy else { return }
         diffTask?.cancel()
         operation = title
+        writeProgress = streamOutput ? WriteOperationProgress(title: title) : nil
+        if streamOutput {
+            result = "\(title)进行中…\n"
+        }
         operationTask = Task {
             defer {
                 checkoutProgress = nil
@@ -416,14 +593,23 @@ final class AppModel: ObservableObject {
             }
             do {
                 try await action()
+                if streamOutput {
+                    writeProgress?.phase = .completed
+                    writeProgress?.finishedAt = Date()
+                    result = "\(title)完成\n\n" + result
+                }
             } catch {
                 if let reportFailure {
                     reportFailure(error)
                     return
                 }
-                var detail = error is CancellationError
-                    ? "操作已中断；已产生的本地变更不会自动撤销。请刷新状态后检查。"
+                let cancelled = error is CancellationError || Task.isCancelled
+                var detail = cancelled
+                    ? cancellationMessage ?? "操作已中断；已产生的本地变更不会自动撤销。请刷新状态后检查。"
                     : error.localizedDescription
+                if streamOutput, writeProgress?.phase == .completed {
+                    detail = cancelled ? "\(title)已完成，但状态刷新已取消；请刷新检查，不要重复执行。" : error.localizedDescription
+                }
                 if refreshAfterFailure {
                     // A new task is needed because the interrupted operation's task is cancelled.
                     let refresh = Task { @MainActor in try await self.reload() }
@@ -434,7 +620,15 @@ final class AppModel: ObservableObject {
                     }
                 }
                 errorMessage = detail
-                result = detail
+                if streamOutput {
+                    let phase: WriteOperationProgress.Phase = writeProgress?.phase == .completed
+                        ? .completedWithWarning : (cancelled ? .cancelled : .failed)
+                    writeProgress?.phase = phase
+                    writeProgress?.finishedAt = Date()
+                    result = "\(title)：\(phase.rawValue)\n\n" + result + "\n\n" + detail
+                } else {
+                    result = detail
+                }
             }
         }
     }

@@ -4,9 +4,10 @@ import SVNCore
 struct HistoryView: View {
     @ObservedObject var model: AppModel
     let onLogin: () -> Void
+    @ViewState private var diffRequest: HistoricalDiffRequest?
 
     private var selectedLog: LogEntry? {
-        model.logs.first { $0.revision == model.selectedHistoryRevision }
+        model.filteredLogs.first { $0.revision == model.selectedHistoryRevision }
     }
 
     private static let displayDateFormatter: DateFormatter = {
@@ -31,11 +32,29 @@ struct HistoryView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Text("最近 50 次提交").font(.headline)
-                Text("从仓库读取").font(.caption).foregroundStyle(.secondary)
-                Spacer()
-                Button("重新加载") { model.loadHistory() }.disabled(model.isBusy)
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Text("提交历史").font(.headline)
+                    Spacer()
+                    if model.historyPath != "." {
+                        Button("工作副本历史") { model.loadHistory() }.disabled(model.isBusy)
+                    }
+                    Button("选择文件…") { model.chooseFileHistory() }.disabled(model.isBusy)
+                    Button("重新加载") { model.reloadHistory() }.disabled(model.isBusy)
+                }
+                Text(model.historyPath == "." ? "范围：当前工作副本路径" : "范围：\(model.historyPath)")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .lineLimit(1).truncationMode(.middle).help(model.historyPath)
+                HStack {
+                    TextField("筛选作者", text: $model.historyFilter.author)
+                    TextField("筛选提交说明", text: $model.historyFilter.message)
+                    TextField("筛选变更路径", text: $model.historyFilter.path)
+                    Button("清除") { model.historyFilter = HistoryFilter() }
+                        .disabled(model.historyFilter.isEmpty)
+                }
+                .textFieldStyle(.roundedBorder)
+                Text("筛选仅作用于已加载记录，多个条件同时匹配；可继续加载更早记录。")
+                    .font(.caption).foregroundStyle(.secondary)
             }
             .padding(14)
             Divider()
@@ -55,23 +74,57 @@ struct HistoryView: View {
                         Button("登录仓库", action: onLogin)
                             .buttonStyle(.borderedProminent).disabled(model.isBusy)
                     }
-                    Button("重试") { model.loadHistory() }.disabled(model.isBusy)
+                    Button("重试") { model.reloadHistory() }.disabled(model.isBusy)
                 }
             case .loaded:
                 if model.logs.isEmpty {
                     ContentUnavailableView("暂无历史记录", systemImage: "clock", description: Text("仓库未返回当前路径的提交记录。"))
+                } else if model.filteredLogs.isEmpty {
+                    ContentUnavailableView("没有匹配的历史记录", systemImage: "magnifyingglass", description: Text("请调整筛选条件，或加载更早记录后继续查找。"))
                 } else {
                     historyContents
                 }
+                historyFooter
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onChange(of: model.historyFilter) { _, _ in model.reconcileHistorySelection() }
+        .onChange(of: model.workingCopy?.root) { _, _ in diffRequest = nil }
+        .sheet(item: $diffRequest) { HistoricalDiffView(request: $0) }
+    }
+
+    private var historyFooter: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if let message = model.historyPageError {
+                Text(message).font(.caption).foregroundStyle(.red).textSelection(.enabled)
+                if model.historyPageRequiresAuthentication {
+                    Button("登录仓库", action: onLogin).disabled(model.isBusy)
+                }
+            }
+            HStack {
+                Text("已加载 \(model.logs.count) 条 · 匹配 \(model.filteredLogs.count) 条")
+                    .font(.caption).foregroundStyle(.secondary)
+                Spacer()
+                if model.isLoadingMoreHistory {
+                    ProgressView().controlSize(.small)
+                    Text("正在加载更早记录…").font(.caption)
+                } else if model.nextHistoryRevision != nil {
+                    Button(model.historyPageError == nil ? "加载更早记录" : "重试加载更早记录") {
+                        model.loadMoreHistory()
+                    }
+                    .disabled(model.isBusy)
+                } else {
+                    Text("已加载全部可见历史").font(.caption).foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(14)
     }
 
     private var historyContents: some View {
         HSplitView {
             List(selection: $model.selectedHistoryRevision) {
-                ForEach(model.logs) { log in
+                ForEach(model.filteredLogs) { log in
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
                             Text("r\(log.revision)").font(.system(.headline, design: .monospaced))
@@ -128,6 +181,18 @@ struct HistoryView: View {
                                     }
                                 }
                                 Spacer(minLength: 0)
+                                Button("查看差异") {
+                                    guard let copy = model.workingCopy else { return }
+                                    do {
+                                        diffRequest = HistoricalDiffRequest(
+                                            change: change, revision: log.revision, directory: copy.root,
+                                            client: try model.client(for: copy.repositoryURL)
+                                        )
+                                    } catch {
+                                        model.errorMessage = error.localizedDescription
+                                    }
+                                }
+                                .disabled(model.isBusy)
                             }
                             .padding(12)
                             Divider()

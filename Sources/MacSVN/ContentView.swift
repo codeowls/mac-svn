@@ -81,13 +81,18 @@ struct ContentView: View {
         .toolbarBackground(.hidden, for: .windowToolbar)
         .sheet(isPresented: $showCheckout) { CheckoutView(model: model) }
         .sheet(isPresented: $showCommit) { commitReview }
+        .sheet(item: $model.revertPlan) { plan in
+            RevertReviewView(plan: plan, onCancel: { model.revertPlan = nil }) {
+                model.confirmRevert(plan)
+            }
+        }
         .sheet(isPresented: $showDiff, onDismiss: { model.focusedPath = nil }) {
             DiffView(model: model)
         }
         .sheet(isPresented: $showLogin) {
             if let copy = model.workingCopy {
                 RepositoryLoginView(model: model, repository: copy.repositoryURL) {
-                    if model.showHistory { model.loadHistory() }
+                    if model.showHistory { model.retryHistory() }
                 }
             }
         }
@@ -111,6 +116,9 @@ struct ContentView: View {
             if startedAt != nil {
                 showOutput = true
             }
+        }
+        .onChange(of: model.writeProgress?.id) { _, id in
+            if id != nil { showOutput = true }
         }
     }
 
@@ -297,7 +305,7 @@ struct ContentView: View {
                                     }
                                 ))
                                 .labelsHidden().toggleStyle(.checkbox)
-                                .disabled(model.isBusy || (!entry.canCommit && entry.item != "unversioned"))
+                                .disabled(model.isBusy || (!entry.canCommit && !entry.canRevert && entry.item != "unversioned"))
                                 Button {
                                     model.focusedPath = entry.path
                                     showDiff = true
@@ -321,6 +329,12 @@ struct ContentView: View {
                             .padding(11)
                             .background(model.focusedPath == entry.path ? Color.primary.opacity(0.07) : .clear,
                                         in: RoundedRectangle(cornerRadius: 9))
+                            .contextMenu {
+                                Button("查看此路径历史") { model.loadHistory(path: entry.path) }
+                                    .disabled(model.isBusy || !entry.canReadHistory)
+                                Button("还原此项目…") { model.prepareRevert(paths: [entry.path]) }
+                                    .disabled(model.isBusy || !entry.canRevert)
+                            }
                         }
                     }
                     .padding(8)
@@ -335,6 +349,8 @@ struct ContentView: View {
                     .disabled(model.isBusy || model.selectedPaths.isEmpty)
                 Button("添加到 SVN") { model.addSelected() }
                     .disabled(!model.canAdd)
+                Button("还原选中项…") { model.prepareRevert() }
+                    .disabled(!model.canRevert)
             }
             .padding(10)
         }
@@ -437,6 +453,24 @@ struct ContentView: View {
                 .buttonStyle(.plain).font(.caption).foregroundStyle(.secondary)
             }
             .frame(height: statusRowHeight)
+            if let progress = model.writeProgress {
+                TimelineView(.periodic(from: progress.startedAt, by: 1)) { context in
+                    VStack(alignment: .leading, spacing: 5) {
+                        HStack {
+                            Text("\(progress.title) · \(progress.phase.rawValue)")
+                            Spacer()
+                            let elapsed = Int((progress.finishedAt ?? context.date).timeIntervalSince(progress.startedAt))
+                            Text("已用时 \(elapsed / 60) 分 \(elapsed % 60) 秒").monospacedDigit()
+                        }
+                        if progress.phase == .running, context.date.timeIntervalSince(progress.lastOutputAt) >= 5 {
+                            Text("等待 SVN 新输出；取消不会撤销已完成的操作。")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .font(.caption)
+                }
+                .padding(.bottom, 12)
+            }
             if let progress = model.checkoutProgress {
                 TimelineView(.periodic(from: progress.startedAt, by: 1)) { context in
                     VStack(alignment: .leading, spacing: 5) {
@@ -473,7 +507,7 @@ struct ContentView: View {
                         Color.clear.frame(height: 1).id("output-end")
                     }
                     .onChange(of: model.result) { _, _ in
-                        if model.checkoutProgress != nil {
+                        if model.checkoutProgress != nil || model.writeProgress != nil {
                             proxy.scrollTo("output-end", anchor: .bottom)
                         }
                     }

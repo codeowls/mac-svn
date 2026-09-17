@@ -39,6 +39,15 @@ public struct StatusEntry: Identifiable, Sendable, Equatable {
         )
     }
 
+    public var canReadHistory: Bool {
+        !["unversioned", "ignored", "added", "external", "obstructed", "incomplete"].contains(item)
+    }
+
+    public var canRevert: Bool {
+        !isConflict && (["added", "modified", "deleted", "replaced", "missing"].contains(item)
+            || (item == "normal" && properties == "modified"))
+    }
+
     public var label: String {
         if treeConflict { return "树冲突" }
         if isConflict { return "冲突" }
@@ -60,6 +69,56 @@ public struct LogEntry: Identifiable, Sendable {
     public let date: String
     public let message: String
     public let changedPaths: [LogChangedPath]
+}
+
+public struct HistoryPage: Sendable {
+    public let entries: [LogEntry]
+    public let nextBeforeRevision: Int?
+}
+
+public struct HistoricalDiff: Sendable {
+    public let oldLabel: String
+    public let newLabel: String
+    public let text: String
+}
+
+public struct RevertPlan: Identifiable, Sendable {
+    public let id = UUID()
+    public let root: URL
+    public let items: [RevertItem]
+}
+
+public struct RevertItem: Identifiable, Sendable, Equatable {
+    public var id: String { entry.path }
+    public let entry: StatusEntry
+    public let isDirectory: Bool
+    public let effect: String
+    public let preview: String
+    let baseRevision: String
+    let properties: String
+    let contentDigest: String?
+}
+
+/// 三个条件同时匹配，只筛选已经读取的记录；路径包含该提交返回的所有变更项。
+public struct HistoryFilter: Sendable, Equatable {
+    public var author = ""
+    public var message = ""
+    public var path = ""
+
+    public init() {}
+
+    public var isEmpty: Bool {
+        [author, message, path].allSatisfy { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    }
+
+    public func matches(_ entry: LogEntry) -> Bool {
+        let author = author.trimmingCharacters(in: .whitespacesAndNewlines)
+        let message = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        let path = path.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (author.isEmpty || entry.author.localizedCaseInsensitiveContains(author))
+            && (message.isEmpty || entry.message.localizedCaseInsensitiveContains(message))
+            && (path.isEmpty || entry.changedPaths.contains { $0.path.localizedCaseInsensitiveContains(path) })
+    }
 }
 
 public struct LogChangedPath: Identifiable, Sendable, Equatable {
