@@ -98,6 +98,10 @@ final class AppModel: ObservableObject {
     @Published private(set) var checkoutProgress: CheckoutProgress?
     @Published var checkoutRecovery: CheckoutRecovery?
     @Published private(set) var writeProgress: WriteOperationProgress?
+    @Published var commitPlan: CommitPlan?
+    @Published var fileOperationDraft: FileOperationDraft?
+    @Published var fileOperationPlan: FileOperationPlan?
+    @Published var fileOperationError: String?
     @Published var revertPlan: RevertPlan?
     @Published var directoryIgnoreDraft: DirectoryIgnoreDraft?
     @Published var directoryIgnoreError: String?
@@ -211,6 +215,10 @@ final class AppModel: ObservableObject {
         historyPath = draft.historyPath
         message = draft.message
         showHistory = false
+        commitPlan = nil
+        fileOperationDraft = nil
+        fileOperationPlan = nil
+        fileOperationError = nil
         revertPlan = nil
         directoryIgnoreDraft = nil
         directoryIgnoreError = nil
@@ -284,17 +292,25 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func commitSelected() {
+    func prepareCommitSelected() {
         guard let copy = workingCopy, canCommit else { return }
         let paths = selectedPaths.sorted()
         let commitMessage = message
+        perform("检查实际提交范围") {
+            self.commitPlan = try await self.client().prepareCommit(paths: paths, message: commitMessage, at: copy.root)
+        }
+    }
+
+    func commitSelected(_ plan: CommitPlan) {
+        guard !isBusy, commitPlan?.id == plan.id, workingCopy?.root == plan.root else { return }
+        commitPlan = nil
         perform(
             "提交选中项目", refreshAfterFailure: true, streamOutput: true,
             cancellationMessage: "提交已取消；服务器结果未确认，请先查看仓库历史核实，勿直接重复提交。"
         ) {
             let client = try self.client()
             try await self.receiveLiveOutput { onOutput in
-                try await client.commit(paths: paths, message: commitMessage, at: copy.root, onOutput: onOutput)
+                try await client.commit(plan, onOutput: onOutput)
             }
             self.writeProgress?.phase = .completed
             self.message = ""
@@ -303,6 +319,58 @@ final class AppModel: ObservableObject {
                 try await self.reload()
             } catch {
                 throw SVNError("提交已成功，但重新读取工作副本失败，请勿重复提交。\n\n\(error.localizedDescription)")
+            }
+        }
+    }
+
+    /// 干净项目不在变更列表中，通过同一工作副本内的系统选择器提供入口。
+    func chooseFileOperation(_ operation: FileOperation) {
+        guard !isBusy, let copy = workingCopy, let window = mainWindow else { return }
+        let panel = NSOpenPanel()
+        panel.title = "选择要\(operation.title)的文件或目录"
+        panel.prompt = "检查项目"
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.directoryURL = copy.root
+        panel.beginSheetModal(for: window) { response in
+            guard response == .OK, let url = panel.url else { return }
+            let prefix = copy.root.path + "/"
+            guard self.workingCopy?.root == copy.root, url.path.hasPrefix(prefix) else {
+                self.errorMessage = "请选择当前工作副本内的文件或目录，不能选择根目录。"
+                return
+            }
+            self.beginFileOperation(operation, path: String(url.path.dropFirst(prefix.count)))
+        }
+    }
+
+    func beginFileOperation(_ operation: FileOperation, path: String) {
+        guard !isBusy, let copy = workingCopy else { return }
+        fileOperationPlan = nil
+        fileOperationError = nil
+        fileOperationDraft = FileOperationDraft(root: copy.root, operation: operation, path: path)
+    }
+
+    func prepareFileOperation(_ draft: FileOperationDraft, newName: String) {
+        guard !isBusy, fileOperationDraft?.id == draft.id, workingCopy?.root == draft.root else { return }
+        fileOperationError = nil
+        perform("检查\(draft.operation.title)范围", reportFailure: { self.fileOperationError = $0.localizedDescription }) {
+            self.fileOperationPlan = try await self.client().prepareFileOperation(
+                draft.operation, path: draft.path, newName: newName, at: draft.root
+            )
+        }
+    }
+
+    func confirmFileOperation(_ plan: FileOperationPlan) {
+        guard !isBusy, fileOperationPlan?.id == plan.id, workingCopy?.root == plan.root else { return }
+        fileOperationPlan = nil
+        fileOperationDraft = nil
+        perform(plan.operation.title, refreshAfterFailure: true) {
+            self.result = try await self.client().performFileOperation(plan)
+            do {
+                try await self.reload()
+            } catch {
+                throw SVNError("\(plan.operation.title)已完成，但刷新失败，请重新读取状态。\n\(error.localizedDescription)")
             }
         }
     }
@@ -776,6 +844,10 @@ final class AppModel: ObservableObject {
         showIgnored = false
         showHistory = false
         errorMessage = nil
+        commitPlan = nil
+        fileOperationDraft = nil
+        fileOperationPlan = nil
+        fileOperationError = nil
         revertPlan = nil
         directoryIgnoreDraft = nil
         directoryIgnoreError = nil

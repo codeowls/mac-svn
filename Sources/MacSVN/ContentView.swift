@@ -5,7 +5,6 @@ import SVNCore
 struct ContentView: View {
     @ObservedObject var model: AppModel
     @ViewState private var showCheckout = false
-    @ViewState private var showCommit = false
     @ViewState private var showLogin = false
     @ViewState private var showDiff = false
     @ViewState private var showOutput = false
@@ -81,7 +80,12 @@ struct ContentView: View {
             }
         }
         .sheet(isPresented: $showCheckout) { CheckoutView(model: model) }
-        .sheet(isPresented: $showCommit) { commitReview }
+        .sheet(item: $model.commitPlan) { plan in
+            CommitReviewView(model: model, plan: plan)
+        }
+        .sheet(item: $model.fileOperationDraft) { draft in
+            FileOperationView(model: model, draft: draft)
+        }
         .sheet(item: $model.directoryIgnoreDraft) { draft in
             DirectoryIgnoreView(model: model, draft: draft)
         }
@@ -128,7 +132,6 @@ struct ContentView: View {
         .onChange(of: model.focusedPath) { _, _ in model.loadDiff() }
         .onChange(of: model.workingCopy?.root) { _, root in
             if root == nil {
-                showCommit = false
                 showOutput = false
             }
         }
@@ -368,6 +371,13 @@ struct ContentView: View {
                                 }
                                 Button("查看此路径历史") { model.loadHistory(path: entry.path) }
                                     .disabled(model.isBusy || !entry.canReadHistory)
+                                if entry.path != ".", !entry.isConflict,
+                                   !["unversioned", "ignored", "external", "deleted", "obstructed", "incomplete"].contains(entry.item) {
+                                    Button("重命名…") { model.beginFileOperation(.rename, path: entry.path) }
+                                        .disabled(model.isBusy)
+                                    Button("删除…", role: .destructive) { model.beginFileOperation(.delete, path: entry.path) }
+                                        .disabled(model.isBusy)
+                                }
                                 Button("还原此项目…") { model.prepareRevert(paths: [entry.path]) }
                                     .disabled(model.isBusy || !entry.canRevert)
                                 Divider()
@@ -400,6 +410,11 @@ struct ContentView: View {
                 Spacer()
                 Button("取消选择") { model.selectedPaths = [] }
                     .disabled(model.isBusy || model.selectedPaths.isEmpty)
+                Menu("文件操作") {
+                    Button("选择项目重命名…") { model.chooseFileOperation(.rename) }
+                    Button("选择项目删除…") { model.chooseFileOperation(.delete) }
+                }
+                .disabled(model.isBusy)
                 Button("添加到 SVN") { model.addSelected() }
                     .disabled(!model.canAdd)
                 Button("还原选中项…") { model.prepareRevert() }
@@ -433,10 +448,10 @@ struct ContentView: View {
                 }
             }
             HStack {
-                Text("仅提交勾选项目，目录不自动包含子项")
+                Text("提交前检查范围；重命名和目录结构操作会列出关联项目")
                     .font(.caption).foregroundStyle(.secondary)
                 Spacer()
-                Button { showCommit = true } label: {
+                Button { model.prepareCommitSelected() } label: {
                     Label("检查并提交", systemImage: "arrow.up")
                 }
                 .buttonStyle(.borderedProminent).tint(Color(nsColor: .labelColor))
@@ -602,32 +617,4 @@ struct ContentView: View {
         .padding(.horizontal, 18)
     }
 
-    private var commitReview: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("确认提交 \(model.selectedPaths.count) 个项目").font(.title2.bold())
-            Text(model.workingCopy?.repositoryURL ?? "").font(.caption).textSelection(.enabled)
-            ScrollView {
-                VStack(alignment: .leading, spacing: 6) {
-                    ForEach(model.selectedPaths.sorted(), id: \.self) { path in
-                        Text(path).font(.system(.body, design: .monospaced))
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .frame(maxHeight: 220)
-            Text(model.message).textSelection(.enabled)
-            HStack {
-                Spacer()
-                Button("返回检查", role: .cancel) { showCommit = false }
-                Button("提交到仓库") {
-                    showCommit = false
-                    model.commitSelected()
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(!model.canCommit)
-            }
-        }
-        .padding(24)
-        .frame(width: 560)
-    }
 }

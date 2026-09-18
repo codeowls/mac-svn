@@ -30,15 +30,15 @@ Real screenshots of the app using a local demo repository and the author `demo`.
 
 ## 简体中文
 
-当前版本为 **1.0.0**，面向日常 SVN 工作副本管理。源码采用 MIT 协议；应用尚未完成正式签名、公证和跨设备兼容性验证。
+当前版本为 **1.1.0**，面向日常 SVN 工作副本管理。源码采用 MIT 协议；应用尚未完成正式签名、公证和跨设备兼容性验证。
 
 ## 下载与安装
 
-前往 [GitHub Releases](https://github.com/codeowls/mac-svn/releases/latest) 下载，或直接选择 **1.0.0** 安装包：
+前往 [GitHub Releases](https://github.com/codeowls/mac-svn/releases/latest) 下载，或直接选择 **1.1.0** 安装包：
 
-- [DMG 安装包（推荐）](https://github.com/codeowls/mac-svn/releases/download/v1.0.0/Mac-SVN-1.0.0-universal.dmg)：打开后将 **Mac SVN.app** 拖入 **Applications（应用程序）**。
-- [ZIP 压缩包](https://github.com/codeowls/mac-svn/releases/download/v1.0.0/Mac-SVN-1.0.0-universal.zip)：解压后将 App 移入应用程序文件夹。
-- [SHA256 校验文件](https://github.com/codeowls/mac-svn/releases/download/v1.0.0/SHA256SUMS.txt)：与安装包放在同一目录，运行 `shasum -a 256 -c SHA256SUMS.txt`；只下载一种安装包时，另一项会提示文件缺失，请核对已下载项显示 `OK`。
+- [DMG 安装包（推荐）](https://github.com/codeowls/mac-svn/releases/download/v1.1.0/Mac-SVN-1.1.0-universal.dmg)：打开后将 **Mac SVN.app** 拖入 **Applications（应用程序）**。
+- [ZIP 压缩包](https://github.com/codeowls/mac-svn/releases/download/v1.1.0/Mac-SVN-1.1.0-universal.zip)：解压后将 App 移入应用程序文件夹。
+- [SHA256 校验文件](https://github.com/codeowls/mac-svn/releases/download/v1.1.0/SHA256SUMS.txt)：与安装包放在同一目录，运行 `shasum -a 256 -c SHA256SUMS.txt`；只下载一种安装包时，另一项会提示文件缺失，请核对已下载项显示 `OK`。
 
 安装包要求 **macOS 14+**，同时包含 **Apple Silicon / Intel** 架构，无需安装 Swift 或 Xcode。已在 Apple Silicon 验收；Intel 已完成构建，尚未进行 Intel 实机验收。App 仍需本机 **Subversion 1.14+**；已安装 Homebrew 时运行 `brew install subversion`，启动后可在设置中检测或指定 SVN 路径。应用界面目前为简体中文。
 
@@ -66,7 +66,7 @@ open "dist/Mac SVN.app"
 
 默认生成本机架构 App；使用 `bash scripts/build-app.sh --universal` 可生成通用架构。版本号统一读取 `VERSION`，采用 ad-hoc 签名，尚未进行 Developer ID 签名和 Apple 公证。构建产物不会提交到 Git。
 
-运行 `bash scripts/package-release.sh` 生成通用架构 DMG、ZIP 和 SHA256 校验文件，输出到 `dist/releases/1.0.0/`；已有同版本输出时拒绝覆盖。维护者更新 `VERSION` 及 `release-notes/<版本>.txt` 后推送对应 `v<版本>` 标签，发布工作流会校验标签、构建验证安装包、上传附件后公开 Release。
+运行 `bash scripts/package-release.sh` 生成通用架构 DMG、ZIP 和 SHA256 校验文件，输出到 `dist/releases/1.1.0/`；已有同版本输出时拒绝覆盖。维护者更新 `VERSION` 及 `release-notes/<版本>.txt` 后推送对应 `v<版本>` 标签，发布工作流会校验标签、构建验证安装包、上传附件后公开 Release。
 
 打包时自动生成并嵌入原生 App 图标；源图和图标说明位于 [`assets/`](assets/README.md)。通过打包后的 `.app` 启动可使用该图标。打包脚本会刷新该 App 的 Launch Services 注册，启动时重新载入 Dock 图标；重建后请退出旧进程再打开 `dist/Mac SVN.app`。`swift run` 是裸可执行文件调试入口，不包含 `.app` 的图标和语言声明。
 
@@ -90,6 +90,7 @@ open "dist/Mac SVN.app"
 - 勾选文件、填写说明、检查清单后提交；提交前重新校验状态。
 - 点击冲突项目查看类型、操作、原基准／传入版本及真实辅助文件；内容冲突可用默认编辑器打开工作文件，保存后重新读取并检查最终内容。明确确认后才采用当前文件标记解决，确认期间内容或冲突状态变化会拒绝执行；完成后重新读取 SVN 状态，仍需单独提交。属性和树冲突仅提供详情，需用 SVN 命令行或专用工具处理。
 - 更新工作副本，产生冲突时保留冲突供后续处理。更新与提交自动展开真实 SVN 输出，显示耗时及进行中／完成／失败／取消状态；失败或取消保留日志，提交结果不明时提示先核实历史。
+- 支持文件和目录的 SVN 重命名、删除：变更项右键操作，或通过“文件操作”选择未修改的项目。操作前列出完整影响范围；目录删除包含其中的未提交修改、未受控和已忽略文件。确认期间内容、属性或范围变化会拒绝执行；嵌套副本和冲突需先单独处理。重命名保留已有历史关联，删除／重命名不自动提交。
 - 选中项目后可还原，执行前展示目标、实际差异及影响，明确确认后才丢弃修改。确认时重新核对状态、属性和内容（含二进制），发生变化则拒绝执行；还原后重新读取状态。普通新增文件撤销新增安排但保留本地内容，带历史复制文件会被删除。
 - 分页查看提交历史，每次加载 50 条，可继续加载更早记录；按作者、提交说明和变更路径组合筛选，明确仅筛选已加载记录。续读失败或取消时保留已有记录，可重试。
 - 支持在历史页选择已提交的文件，或右键本地变更项查看该路径历史；可返回工作副本历史，重载及登录重试保持当前查询范围。选中提交后显示该次提交的变更文件／目录列表，区分新增、修改、删除、替换和复制来源。路径按仓库根目录显示，以服务器返回的授权范围为准。
@@ -108,7 +109,7 @@ open "dist/Mac SVN.app"
 4. “更新”从服务器获取变更；“刷新”只重新读取本地状态。“历史记录”需要访问服务器。
 5. 历史页的“加载更早记录”继续读取下一页；作者、说明、路径三个筛选条件同时匹配，不区分大小写。筛选没有结果时仍可加载更早记录。点击“选择文件…”可查看当前副本内干净文件的历史；变更项右键“查看此路径历史”也支持目录。单路径查询只返回涉及该路径的提交，右侧明细仍展示整次提交的授权变更项。嵌套工作副本和 externals 需单独打开；未受控及尚未提交的新增项目没有本地仓库历史入口。
 
-SVN 没有 Git 暂存区；复选框用于选择本次提交、添加或还原的目标。提交使用 `--depth empty`，不自动提交勾选目录下未勾选的子项。目录删除、替换、带历史的目录复制可能隐式涉及子项，首版明确拒绝这几类目录提交。
+SVN 没有 Git 暂存区；复选框用于选择本次提交、添加或还原的目标。提交前读取实际范围：普通目录不包含未选子项；重命名两端、未提交的父目录，以及目录删除／替换／带历史复制涉及的子项会完整列入确认清单，逐项说明原因。目录替换同时列出被移除的原 BASE 子项。确认时再次核对内容（含二进制）、属性、状态及范围，变化时要求重新检查；不会静默扩大提交范围。
 
 ## SVN 设置与忽略规则
 
@@ -138,7 +139,7 @@ bash scripts/create-demo.sh
 - 私有仓库可直接通过“仓库账号”登录，支持 `http://`、`https://` 和 `svn://`。登录仅验证读取权限，写权限由提交时的服务器授权检查决定；失败不会自动重试提交。`file://` 不需要登录，`svn+ssh://` 继续使用系统 SSH 认证。
 - App 中输入的密码仅保留在本次会话，按验证成功的仓库根路径隔离；关闭 App 后需重新登录。密码通过标准输入传递，不放入进程参数、不写入 UserDefaults 或 SVN 认证缓存。未在 App 登录的仓库仍使用本机 SVN 已配置的认证缓存、代理和证书。
 - 所有命令使用 `--non-interactive`，不静默信任证书；URL 不允许包含密码。显式登录使用 SVN 1.14+ 的 `--password-from-stdin`。
-- 尚未内置 SVN 引擎、Finder 扩展、三方合并编辑器、重命名/删除按钮、稀疏检出设置或文件锁管理。
+- 尚未内置 SVN 引擎、Finder 扩展、三方合并编辑器、稀疏检出设置或文件锁管理。
 - 检出、状态扫描和更新使用 `--ignore-externals`；外部工作副本需单独打开管理。
 - 还原暂不支持冲突、移动两端，以及删除／缺失／替换／带历史复制的目录。目录属性只还原自身，不递归处理子项；普通新增目录必须同时选中其已受控子项。
 - 同一窗口内写操作串行执行；不要与终端或其他客户端同时修改同一个工作副本。
@@ -170,15 +171,15 @@ scripts/build-app.sh  本地 .app 打包
 
 ## English
 
-**Version 1.0.0.** Mac SVN is a native SwiftUI client for everyday Subversion work. Source code is available under the MIT License. The app has not yet completed release signing, notarization, or cross-device compatibility validation.
+**Version 1.1.0.** Mac SVN is a native SwiftUI client for everyday Subversion work. Source code is available under the MIT License. The app has not yet completed release signing, notarization, or cross-device compatibility validation.
 
 ### Download and install
 
-Visit [GitHub Releases](https://github.com/codeowls/mac-svn/releases/latest), or download **1.0.0** directly:
+Visit [GitHub Releases](https://github.com/codeowls/mac-svn/releases/latest), or download **1.1.0** directly:
 
-- [DMG installer (recommended)](https://github.com/codeowls/mac-svn/releases/download/v1.0.0/Mac-SVN-1.0.0-universal.dmg): open it and drag **Mac SVN.app** into **Applications**.
-- [ZIP archive](https://github.com/codeowls/mac-svn/releases/download/v1.0.0/Mac-SVN-1.0.0-universal.zip): extract it and move the app into Applications.
-- [SHA256 checksums](https://github.com/codeowls/mac-svn/releases/download/v1.0.0/SHA256SUMS.txt): place beside the downloads and run `shasum -a 256 -c SHA256SUMS.txt`. If you downloaded only one package, the other will be reported missing; verify that your downloaded file shows `OK`.
+- [DMG installer (recommended)](https://github.com/codeowls/mac-svn/releases/download/v1.1.0/Mac-SVN-1.1.0-universal.dmg): open it and drag **Mac SVN.app** into **Applications**.
+- [ZIP archive](https://github.com/codeowls/mac-svn/releases/download/v1.1.0/Mac-SVN-1.1.0-universal.zip): extract it and move the app into Applications.
+- [SHA256 checksums](https://github.com/codeowls/mac-svn/releases/download/v1.1.0/SHA256SUMS.txt): place beside the downloads and run `shasum -a 256 -c SHA256SUMS.txt`. If you downloaded only one package, the other will be reported missing; verify that your downloaded file shows `OK`.
 
 Requires **macOS 14+** and local **Subversion 1.14+**. Both **Apple Silicon and Intel** architectures are included; Swift/Xcode is not required. Apple Silicon runtime checks passed; Intel is built but has not been tested on physical Intel hardware. With Homebrew already installed, run `brew install subversion`; the SVN path can be selected in app Settings. The app interface is Simplified Chinese.
 
@@ -207,7 +208,7 @@ open "dist/Mac SVN.app"
 
 The script builds for the local architecture, embeds the app icon and language declarations, and applies an ad-hoc signature. It refreshes this app's Launch Services registration. Quit the previous app process before reopening the rebuilt bundle. Build artifacts are excluded from Git.
 
-Use `bash scripts/build-app.sh --universal` for both architectures, or `bash scripts/package-release.sh` to produce DMG, ZIP, and checksums in `dist/releases/1.0.0/`. Existing release output is not overwritten. The version comes from `VERSION`; packages use ad-hoc signing without Developer ID signing or Apple notarization. Running `swift run` starts a bare executable without the bundle's icon and language configuration.
+Use `bash scripts/build-app.sh --universal` for both architectures, or `bash scripts/package-release.sh` to produce DMG, ZIP, and checksums in `dist/releases/1.1.0/`. Existing release output is not overwritten. The version comes from `VERSION`; packages use ad-hoc signing without Developer ID signing or Apple notarization. Running `swift run` starts a bare executable without the bundle's icon and language configuration.
 
 Liquid Glass appearance requires a macOS 26+ SDK and macOS 26+ at runtime; the minimum deployment target remains macOS 14. The build script records the actual linked SDK. CI uses Xcode 16.4 and checks the compatibility build, not Liquid Glass appearance.
 
@@ -218,7 +219,8 @@ Liquid Glass appearance requires a macOS 26+ SDK and macOS 26+ at runtime; the m
 - Inspect conflict types, operations, base/incoming revisions, and actual conflict files. Open the working file in its default editor, review the saved result, and explicitly confirm before marking a file-content conflict resolved. Content or conflict changes after review require a new review. SVN status is read back; committing remains a separate action. Property and tree conflicts are read-only and require SVN or a dedicated tool.
 - Review and filter local changes, including content, properties, missing files, and conflicts. Unversioned files are clearly distinguished from versioned changes.
 - Inspect unified or side-by-side text diffs with line numbers, change counts, and navigation between changed sections. Binary files, including Word documents, show an explicit limitation message with expandable original SVN diagnostics and property changes.
-- Add, revert, or commit only selected items. Commits are reviewed before execution; directories do not automatically include unselected children.
+- Rename or delete files and directories through context menus or the File Operations picker. Review all affected paths before confirming; directory deletion includes modified, unversioned, and ignored contents. Changes after review require a new review. Nested working copies and conflicts need separate handling. Rename preserves existing history; neither operation commits automatically.
+- Review commit scope, including required move counterparts, added parents, and descendants of structural directory operations. Ordinary directories do not include unselected children.
 - Review the actual changes before reverting. State and content are checked again at confirmation. Ordinary newly added files remain on disk after reverting their addition; files added with history may be deleted by SVN revert.
 - Browse history in pages of 50 revisions, filter loaded records by author, message, and path, and view history for an individual versioned path. Click a changed file or directory row to inspect its historical diff, including copy-source comparisons.
 - Export either existing side of a historical file comparison, including binary files and copy sources. Replacement exports retain the replaced node as the before version. Exports preserve raw bytes and file extensions, exclude SVN properties, and must be saved outside the current working copy. Failed or cancelled reads leave the destination untouched.
@@ -235,7 +237,7 @@ Liquid Glass appearance requires a macOS 26+ SDK and macOS 26+ at runtime; the m
 4. Enter a commit message and choose **检查并提交** (review and commit).
 5. Use **刷新** (refresh) for local status, **更新** (update) to download repository changes, and **提交历史** (revision history) to inspect server history.
 
-SVN has no Git-style staging area. Checkboxes select targets for the next operation. Commits use `--depth empty`; directory deletion, replacement, and copies with history are currently refused because they may implicitly affect children.
+SVN has no Git-style staging area. Checkboxes select targets for review. The confirmation lists all paths included by moves, uncommitted parents, directory deletion, replacement, and copies with history; replacements also list removed BASE descendants. Content, properties, status, and scope are checked again before committing. Ordinary directories still exclude unselected children.
 
 To explore safely with local sample files:
 
@@ -257,7 +259,7 @@ Directory rules are stored in `svn:ignore`, one name or pattern per line. They a
 - Passwords entered in the app stay in memory for the current session and are scoped to the authenticated repository root. They are passed through standard input using `--password-from-stdin`, with `--no-auth-cache`; they are not stored in UserDefaults or command-line arguments.
 - Without an app login, SVN uses its existing local authentication cache, proxy, and certificate configuration. Commands are noninteractive and do not silently trust certificates. URLs containing passwords are rejected.
 - Recent paths, repository addresses, and SVN settings are stored locally in UserDefaults. They are not part of this source repository.
-- There is no bundled SVN engine, Finder extension, three-way merge editor, rename/delete UI, sparse-checkout settings, or file-lock management yet.
+- There is no bundled SVN engine, Finder extension, three-way merge editor, sparse-checkout settings, or file-lock management yet.
 - Externals and nested working copies are managed separately. Revert does not currently support conflicts, move pairs, or deleted/missing/replaced/copied directories.
 - Writes are serialized within one window. Do not modify the same working copy concurrently from another client.
 - Cancellation does not roll back completed work. Failed or cancelled checkout can leave a partial directory. If a commit result is unclear, inspect repository history before retrying.

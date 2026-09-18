@@ -1,0 +1,27 @@
+Mac SVN 1.1.0
+
+下载与安装 / Download and install
+- macOS 14+，通用架构安装包（Apple Silicon / Intel）。
+- 推荐下载 Mac-SVN-1.1.0-universal.dmg，打开后将 Mac SVN.app 拖入 Applications。
+- 也可下载 ZIP 并解压，将 App 移入 Applications。无需安装 Swift 或 Xcode。
+- 需要本机 Subversion 1.14+；已安装 Homebrew 时运行 brew install subversion。
+- SHA256SUMS.txt 可用于校验下载文件：shasum -a 256 -c SHA256SUMS.txt。
+- 本版仅使用 ad-hoc 签名，尚无 Developer ID 签名和 Apple 公证；macOS 可能阻止首次打开。请核对来源后参考 https://support.apple.com/102445 ，无需关闭系统 Gatekeeper。
+- 已在 Apple Silicon 原应用验收；Intel 架构已构建，尚未进行 Intel 实机验收。
+
+本次更新
+- 新增文件／目录 SVN 重命名与删除，支持中文、空格、@ 等路径；重命名保留已有历史。
+- 操作前展示完整影响范围；目录删除包括未受控及已忽略内容，取消不操作，确认期间发生变化则要求重新检查。
+- 提交前列出移动两端、新增父目录和目录删除／替换／带历史复制涉及的子项；替换同时列出被删除的原 BASE 子项。
+- 普通目录保持选择性提交；内容、属性、状态及范围在执行前再次核对。
+- 不自动解决冲突，不跨嵌套副本操作；删除未提交内容无法通过 SVN 恢复。目录／移动还原仍保留现有支持限制。
+- 32 项真实 SVN 引擎检查通过；原应用目录重命名→提交、目录删除取消→确认→提交及独立历史读回通过。
+
+English
+Download the universal DMG, open it, and drag Mac SVN.app into Applications, or extract the ZIP. Requires macOS 14+ and a local Subversion 1.14+ installation; Swift/Xcode is not required. The app interface is Simplified Chinese.
+
+This release is ad-hoc signed and is not Developer ID signed or Apple notarized. macOS may block its first launch; verify the source and checksums, then follow Apple's instructions at https://support.apple.com/102445. Do not disable Gatekeeper system-wide. Apple Silicon runtime checks passed; Intel is built but has not been tested on physical Intel hardware.
+
+See README for features, requirements, and limitations: https://github.com/codeowls/mac-svn#english
+
+New in 1.1.0: reviewed SVN rename/delete operations and explicit commit scopes for moves, added parents, directory deletion/replacement, and history-preserving copies. Changes after review are rejected. Unselected children of ordinary directories remain uncommitted. Directory deletion includes local unversioned/ignored files; uncommitted content cannot be recovered from SVN.

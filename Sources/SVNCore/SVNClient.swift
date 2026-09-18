@@ -445,7 +445,7 @@ public struct SVNClient: Sendable {
     }
 
     /// 元数据属性的输出顺序可能变化，按键和子节点排序后生成可重读比较的指纹。
-    private func conflictMetadataDigest(_ node: XMLNode) throws -> String {
+    func conflictMetadataDigest(_ node: XMLNode) throws -> String {
         let value: [String: Any] = [
             "name": node.name, "text": node.children.isEmpty ? node.text : "",
             "attributes": node.attributes, "children": try node.children.map(conflictMetadataDigest).sorted()
@@ -506,37 +506,11 @@ public struct SVNClient: Sendable {
         paths: [String], message: String, at directory: URL,
         onOutput: (@Sendable (String) -> Void)? = nil
     ) async throws -> String {
-        guard !paths.isEmpty else { throw SVNError("请先勾选要提交的文件") }
-        guard !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            throw SVNError("请填写提交说明")
+        let plan = try await prepareCommit(paths: paths, message: message, at: directory)
+        guard Set(plan.items.map { $0.path }) == Set(paths) else {
+            throw SVNError("此提交涉及关联路径，请先检查并确认完整提交清单。")
         }
-        let targets = try paths.sorted().map(localTarget)
-        let current = try await status(at: directory)
-        for path in paths {
-            guard let entry = current.first(where: { $0.path == path }), entry.canCommit else {
-                throw SVNError("\(path) 的状态已变化或不可提交，请刷新后检查。")
-            }
-            // SVN directory deletions/copies may include descendants even with --depth empty.
-            // This MVP rejects these operations instead of committing unselected children.
-            if entry.item == "deleted" || entry.item == "replaced" || entry.copied {
-                let info = try await command(["info", "--xml", "--", try localTarget(path)], in: directory)
-                let root = try XMLReader.parse(info.stdout)
-                guard root.child("entry")?.attributes["kind"] == "file" else {
-                    throw SVNError("首版暂不支持提交目录删除、替换或带历史的目录复制：\(path)。请用 SVN 命令行处理。")
-                }
-            }
-        }
-        do {
-            let output = try await command(
-                ["commit", "--depth", "empty", "--message", message, "--"] + targets,
-                in: directory, onOutput: onOutput
-            )
-            return output.stdout + output.stderr
-        } catch is CancellationError {
-            throw CancellationError()
-        } catch {
-            throw SVNError("提交未确认完成，请先查看仓库历史核实结果，勿直接重复提交。\n\n\(error.localizedDescription)")
-        }
+        return try await commit(plan, onOutput: onOutput)
     }
 
     /// 只生成待确认清单，不修改文件；目录按 empty 深度处理，结构性目录还原另行支持。
@@ -621,7 +595,7 @@ public struct SVNClient: Sendable {
     }
 
     /// 二进制内容也参与确认快照；读取符号链接本身，不跟随链接读取其他位置的文件。
-    private func contentDigest(at url: URL, isDirectory: Bool) throws -> String? {
+    func contentDigest(at url: URL, isDirectory: Bool) throws -> String? {
         if isDirectory { return nil }
         let manager = FileManager.default
         let attributes: [FileAttributeKey: Any]
@@ -635,7 +609,7 @@ public struct SVNClient: Sendable {
             return SHA256.hash(data: Data(try manager.destinationOfSymbolicLink(atPath: url.path).utf8)).description
         }
         guard attributes[.type] as? FileAttributeType == .typeRegular else {
-            throw SVNError("还原目标不是普通文件或符号链接：\(url.lastPathComponent)。")
+            throw SVNError("目标不是普通文件或符号链接：\(url.lastPathComponent)。")
         }
         let handle = try FileHandle(forReadingFrom: url)
         defer { handle.closeFile() }
@@ -647,7 +621,7 @@ public struct SVNClient: Sendable {
     }
 
     /// A trailing @ disables peg-revision interpretation for filenames containing @.
-    private func localTarget(_ path: String) throws -> String {
+    func localTarget(_ path: String) throws -> String {
         guard !path.isEmpty, !path.hasPrefix("/"),
               !path.split(separator: "/").contains(".."), !path.contains("\0") else {
             throw SVNError("文件路径必须位于当前工作副本内")
@@ -655,7 +629,7 @@ public struct SVNClient: Sendable {
         return "./" + path + "@"
     }
 
-    private func command(
+    func command(
         _ arguments: [String],
         in directory: URL? = nil,
         onOutput: (@Sendable (String) -> Void)? = nil
