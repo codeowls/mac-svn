@@ -264,6 +264,20 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// 清理仅由用户显式触发，不删除未受控文件，也不自动重试网络操作。
+    func cleanup(at directory: URL) {
+        perform("清理工作副本锁", streamOutput: true) {
+            let copy = try await self.readWorkingCopy(at: directory)
+            let client = try self.client(for: copy.repositoryURL)
+            try await self.receiveLiveOutput { onOutput in
+                try await client.cleanup(at: copy.root, onOutput: onOutput)
+            }
+            self.writeProgress?.phase = .completed
+            try await self.reload()
+            self.result += "\n工作副本清理完成，可手动更新继续下载。"
+        }
+    }
+
     func update(at directory: URL? = nil) {
         guard let directory = directory ?? workingCopy?.root else { return }
         perform("更新工作副本", refreshAfterFailure: true, streamOutput: true) {
@@ -595,7 +609,12 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func checkout(repository: String, destination: URL, depth: CheckoutDepth = .infinity) {
+    func checkout(
+        repository: String,
+        destination: URL,
+        depth: CheckoutDepth = .infinity,
+        selectedDirectories: [String]? = nil
+    ) {
         perform(
             "检出仓库", streamOutput: true,
             cancellationMessage: "检出已中断，已下载内容保留在：\(destination.path)。请检查目标目录后决定如何继续。"
@@ -613,7 +632,10 @@ final class AppModel: ObservableObject {
             }
             let output: String
             do {
-                output = try await client.checkout(repository: repository, destination: destination, depth: depth) { text in
+                output = try await client.checkout(
+                    repository: repository, destination: destination, depth: depth,
+                    selectedDirectories: selectedDirectories
+                ) { text in
                     stream.append(text)
                 }
                 stream.finish()
@@ -652,6 +674,12 @@ final class AppModel: ObservableObject {
         do {
             let inspection = try await client.inspectCheckout(at: destination)
             checkoutRecovery?.inspection = inspection
+            // 网络失败或取消后，已建立的副本仍应可从侧栏打开和继续更新。
+            // inspectCheckout 已核对根目录；普通非空目录不会被登记为副本。
+            if let copy = inspection.workingCopy {
+                remember(copy.root)
+                rememberRepository(copy.repositoryURL)
+            }
             result += "\n目录检查：\(inspection.summary)\n\(inspection.guidance)\n"
         } catch {
             checkoutRecovery?.error = error.localizedDescription

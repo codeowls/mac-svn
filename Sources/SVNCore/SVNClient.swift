@@ -204,6 +204,15 @@ public struct SVNClient: Sendable {
         return path == "/" ? "." : String(path.dropFirst())
     }
 
+    /// 仅完成 SVN 未完成的管理任务和清理锁，不使用删除文件或清理外部副本的选项。
+    public func cleanup(
+        at directory: URL,
+        onOutput: (@Sendable (String) -> Void)? = nil
+    ) async throws -> String {
+        let output = try await command(["cleanup", "--", ".@"], in: directory, onOutput: onOutput)
+        return output.stdout + output.stderr
+    }
+
     public func update(
         at directory: URL,
         onOutput: (@Sendable (String) -> Void)? = nil
@@ -220,9 +229,24 @@ public struct SVNClient: Sendable {
         repository: String,
         destination: URL,
         depth: CheckoutDepth = .infinity,
+        selectedDirectories: [String]? = nil,
         onOutput: (@Sendable (String) -> Void)? = nil
     ) async throws -> String {
         let target = try Self.repositoryTarget(repository)
+        if let selectedDirectories {
+            guard !selectedDirectories.isEmpty else {
+                throw SVNError("请至少勾选一个目录。")
+            }
+            for name in selectedDirectories {
+                _ = try Self.childRepositoryURL(parent: repository, name: name)
+                _ = try localTarget(name)
+            }
+            let entries = try await listRepository(repository)
+            let directories = Set(entries.filter(\.isDirectory).map(\.name))
+            guard Set(selectedDirectories).isSubset(of: directories) else {
+                throw SVNError("勾选项已不存在或不是目录，请重新浏览仓库后选择。")
+            }
+        }
         let fileManager = FileManager.default
         var isDirectory: ObjCBool = false
         if fileManager.fileExists(atPath: destination.path, isDirectory: &isDirectory) {
@@ -235,9 +259,75 @@ public struct SVNClient: Sendable {
                 throw SVNError("检出目标文件夹不为空，请选择或新建一个空文件夹；已有工作副本请直接打开。")
             }
         }
-        let output = try await command([
-            "checkout", "--depth", depth.rawValue, "--ignore-externals", "--", target, destination.path
-        ], onOutput: onOutput)
+        var result = ""
+        var transferError: SVNError
+        do {
+            let output = try await command([
+                "checkout", "--depth", selectedDirectories == nil ? depth.rawValue : "empty",
+                "--ignore-externals", "--", target, destination.path
+            ], onOutput: onOutput)
+            result += output.stdout + output.stderr
+            result += try await expandCheckoutDirectories(selectedDirectories, at: destination, onOutput: onOutput)
+            return result
+        } catch let error as SVNError where error.isInterruptedTransfer {
+            transferError = error
+        }
+
+        // 仅恢复本次从空目录开始的检出；子进程已退出，最多自动清理、续传两次。
+        for attempt in 1...2 {
+            try Task.checkCancellation()
+            let notice = "\n检出传输中断，正在自动恢复（\(attempt)/2）：清理工作副本锁后继续更新。\n"
+            result += transferError.diagnostic + notice
+            onOutput?(notice)
+            try await Task.sleep(for: .seconds(1))
+            guard fileManager.fileExists(atPath: destination.appendingPathComponent(".svn").path) else {
+                throw transferError
+            }
+            let copy = try await workingCopy(at: destination)
+            let expectedURL = URL(string: repository)?.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            let actualURL = URL(string: copy.repositoryURL)?.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            guard copy.root.resolvingSymlinksInPath().path == destination.resolvingSymlinksInPath().path,
+                  actualURL == expectedURL else {
+                throw SVNError("自动恢复已停止：目标工作副本与本次检出目录或仓库不一致。\n\(transferError.message)")
+            }
+            // 清理失败必须停止，不能继续更新，更不能删除目录后重新检出。
+            result += try await cleanup(at: destination, onOutput: onOutput)
+            try Task.checkCancellation()
+            do {
+                // 选目录模式只更新根本身；不能对已有子目录使用 --set-depth empty，
+                // 否则 SVN 会收缩副本并移除已下载目录。随后补齐全部已选目录。
+                let depthOptions = selectedDirectories == nil
+                    ? ["--set-depth", depth.rawValue] : ["--depth", "empty"]
+                let update = try await command(
+                    ["update"] + depthOptions
+                        + ["--accept", "postpone", "--ignore-externals", "--", ".@"],
+                    in: destination, onOutput: onOutput
+                )
+                result += update.stdout + update.stderr
+                result += try await expandCheckoutDirectories(selectedDirectories, at: destination, onOutput: onOutput)
+                let completed = "\n自动恢复完成。\n"
+                onOutput?(completed)
+                return result + completed
+            } catch let error as SVNError where error.isInterruptedTransfer {
+                transferError = error
+            }
+        }
+        throw SVNError("自动恢复已尝试 2 次，检出仍未完成；已下载文件保留，请检查网络或服务器后继续更新。\n\n\(transferError.message)")
+    }
+
+    /// 初次检出和恢复使用同一组选中目录，包含中断时尚未开始下载的目录。
+    private func expandCheckoutDirectories(
+        _ directories: [String]?,
+        at destination: URL,
+        onOutput: (@Sendable (String) -> Void)?
+    ) async throws -> String {
+        guard let directories else { return "" }
+        try Task.checkCancellation()
+        let targets = try Set(directories).sorted().map(localTarget)
+        let output = try await command(
+            ["update", "--set-depth", "infinity", "--accept", "postpone", "--ignore-externals", "--"] + targets,
+            in: destination, onOutput: onOutput
+        )
         return output.stdout + output.stderr
     }
 
@@ -280,7 +370,7 @@ public struct SVNClient: Sendable {
             directory: directory, workingCopy: copy,
             summary: "已识别工作副本；不完整／缺失／阻塞 \(incomplete) 项，冲突 \(conflicts) 项。"
                 + (locked ? " 检测到工作副本锁。" : ""),
-            guidance: (locked ? "确认其他 SVN 操作已结束后，使用 SVN cleanup 清理工作副本锁，再重新检查。" : "")
+            guidance: (locked ? "确认其他 SVN 操作已结束后，右键左侧副本选择“清理工作副本锁…”，再重新检查。" : "")
                 + "可打开副本检查状态，再手动更新补齐；本地检查不能证明检出完整。不要直接在此非空目录重新检出。"
         )
     }

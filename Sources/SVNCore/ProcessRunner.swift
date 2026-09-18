@@ -12,17 +12,23 @@ public struct SVNError: LocalizedError, Sendable {
     public let message: String
     public let diagnostic: String
     public let requiresAuthentication: Bool
+    public let isInterruptedTransfer: Bool
 
     public init(_ message: String) {
         self.message = message
         self.diagnostic = message
         self.requiresAuthentication = false
+        self.isInterruptedTransfer = false
     }
 
     /// 展示可操作的认证提示；XML 半成品仅保留在诊断输出中，不混入用户错误正文。
     public init(output: CommandOutput, xmlOutput: Bool) {
         diagnostic = "SVN 退出码 \(output.exitCode)\n\(output.stderr)\(output.stdout)"
         requiresAuthentication = output.stderr.contains("E170001:") || output.stderr.contains("E215004:")
+        // 只依据 SVN 的错误流识别已知的响应截断，不从文件名或普通输出猜测。
+        isInterruptedTransfer = !requiresAuthentication && output.stderr
+            .components(separatedBy: .newlines)
+            .contains { $0.hasPrefix("svn: E120106:") }
         let detail = xmlOutput ? output.stderr : output.stderr + output.stdout
         let reason = detail.trimmingCharacters(in: .whitespacesAndNewlines)
         let summary = requiresAuthentication

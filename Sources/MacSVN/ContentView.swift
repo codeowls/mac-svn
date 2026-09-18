@@ -10,6 +10,7 @@ struct ContentView: View {
     @ViewState private var showOutput = false
     @ViewState private var followsOutput = true
     @ViewState private var recentPathPendingRemoval: String?
+    @ViewState private var pathPendingCleanup: String?
     @ViewState private var footerHeight: CGFloat = 44
 
     @ViewState private var hoveredPath: String?
@@ -113,13 +114,26 @@ struct ContentView: View {
                 }
             }
         }
-        .alert("操作未完成", isPresented: Binding(
+        .sheet(isPresented: Binding(
             get: { model.errorMessage != nil },
             set: { if !$0 { model.errorMessage = nil } }
         )) {
-            Button("知道了", role: .cancel) { model.errorMessage = nil }
-        } message: {
-            Text(model.errorMessage ?? "")
+            OperationErrorView(message: model.errorMessage ?? "") {
+                model.errorMessage = nil
+            }
+        }
+        .alert("清理工作副本锁？", isPresented: Binding(
+            get: { pathPendingCleanup != nil },
+            set: { if !$0 { pathPendingCleanup = nil } }
+        ), presenting: pathPendingCleanup) { path in
+            Button("取消", role: .cancel) { pathPendingCleanup = nil }
+            Button("清理") {
+                pathPendingCleanup = nil
+                model.cleanup(at: URL(fileURLWithPath: path))
+            }
+            .disabled(model.isBusy)
+        } message: { path in
+            Text("\(path)\n\n请确认其他 SVN 客户端或终端已停止操作此副本。清理会完成未完成的本地管理任务并释放工作副本锁，不删除未受控文件。完成后可手动更新。")
         }
         .alert("从最近列表移除此工作副本？", isPresented: Binding(
             get: { recentPathPendingRemoval != nil },
@@ -202,6 +216,13 @@ struct ContentView: View {
                                     model.update(at: URL(fileURLWithPath: path))
                                 } label: {
                                     Label("更新", systemImage: "arrow.down.circle")
+                                }
+                                .disabled(model.isBusy)
+                                Button {
+                                    pathPendingCleanup = path
+                                } label: {
+                                    Label("清理工作副本锁…", systemImage: "wrench.and.screwdriver")
+                                        .labelStyle(.titleAndIcon)
                                 }
                                 .disabled(model.isBusy)
                                 Divider()
@@ -632,6 +653,8 @@ struct ContentView: View {
             }
             if let progress = model.writeProgress, model.checkoutProgress == nil {
                 TimelineView(.periodic(from: progress.startedAt, by: 1)) { context in
+                    let awaitingOutput = progress.phase == .running
+                        && context.date.timeIntervalSince(progress.lastOutputAt) >= 5
                     VStack(alignment: .leading, spacing: 5) {
                         HStack {
                             Text("\(progress.title) · \(progress.phase.rawValue)")
@@ -639,10 +662,12 @@ struct ContentView: View {
                             let elapsed = Int((progress.finishedAt ?? context.date).timeIntervalSince(progress.startedAt))
                             Text("已用时 \(elapsed / 60) 分 \(elapsed % 60) 秒").monospacedDigit()
                         }
-                        if progress.phase == .running, context.date.timeIntervalSince(progress.lastOutputAt) >= 5 {
-                            Text("等待 SVN 新输出；取消不会撤销已完成的操作。")
-                                .foregroundStyle(.secondary)
-                        }
+                        // 等待提示保留一行高度，输出恢复时不改变面板及侧栏分割线位置。
+                        Text("等待 SVN 新输出；取消不会撤销已完成的操作。")
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .opacity(awaitingOutput ? 1 : 0)
+                            .accessibilityHidden(!awaitingOutput)
                     }
                     .font(.caption)
                 }
@@ -650,6 +675,8 @@ struct ContentView: View {
             }
             if let progress = model.checkoutProgress {
                 TimelineView(.periodic(from: progress.startedAt, by: 1)) { context in
+                    let awaitingOutput = !progress.isOpeningWorkingCopy
+                        && context.date.timeIntervalSince(progress.lastOutputAt) >= 5
                     VStack(alignment: .leading, spacing: 5) {
                         HStack {
                             Text("已检出 \(progress.completedItemCount) 项（文件/目录）")
@@ -666,11 +693,12 @@ struct ContentView: View {
                         } else {
                             Text("正在连接仓库，等待检出输出…")
                         }
-                        if !progress.isOpeningWorkingCopy,
-                           context.date.timeIntervalSince(progress.lastOutputAt) >= 5 {
-                            Text("等待 SVN 新输出；大文件传输时可能暂时没有新记录，可取消操作。")
-                                .foregroundStyle(.secondary)
-                        }
+                        // 大文件下载期间只切换提示可见性，不反复插入、移除布局行。
+                        Text("等待 SVN 新输出；大文件传输时可能暂时没有新记录，可取消操作。")
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .opacity(awaitingOutput ? 1 : 0)
+                            .accessibilityHidden(!awaitingOutput)
                     }
                     .font(.caption)
                 }

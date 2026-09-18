@@ -8,6 +8,7 @@ struct CheckoutView: View {
     @Environment(\.dismiss) private var dismiss
     @ViewState private var destination: URL?
     @ViewState private var depth: CheckoutDepth = .infinity
+    @ViewState private var selectDirectories = false
     @ViewState private var showLogin = false
     @ViewState private var panelWindow: NSWindow?
 
@@ -20,6 +21,14 @@ struct CheckoutView: View {
         }
         if browser.checkoutURL.isEmpty {
             return "请输入仓库或分支地址。"
+        }
+        if selectDirectories {
+            if browser.location?.url != browser.checkoutURL || browser.errorMessage != nil {
+                return "请先浏览仓库，再勾选要检出的目录。"
+            }
+            if browser.selectedDirectories.isEmpty {
+                return "请至少勾选一个目录。"
+            }
         }
         if destination == nil {
             return "请选择本地保存位置。"
@@ -78,6 +87,12 @@ struct CheckoutView: View {
                     Button("仓库账号…") { showLogin = true }
                         .disabled(browser.checkoutURL.isEmpty || browser.isLoading || model.isBusy)
                 }
+                Toggle("按目录勾选检出", isOn: $selectDirectories)
+                    .toggleStyle(.checkbox)
+                if selectDirectories {
+                    Text("勾选当前层的目录，将完整下载到同一个工作副本。切换或重新浏览目录会清空勾选。")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
                 repositoryList
             }
             VStack(alignment: .leading, spacing: 10) {
@@ -96,14 +111,20 @@ struct CheckoutView: View {
             .padding(14)
             .modifier(WorkspacePanel())
             VStack(alignment: .leading, spacing: 8) {
-                Picker("检出深度", selection: $depth) {
-                    ForEach(CheckoutDepth.allCases, id: \.self) { option in
-                        Text(option.label).tag(option)
+                if selectDirectories {
+                    Text("已选 \(browser.selectedDirectories.count) 个目录 · 全递归检出")
+                    Text("仅下载勾选目录及其全部内容，不下载当前层文件和未选目录。")
+                        .font(.caption).foregroundStyle(.secondary)
+                } else {
+                    Picker("检出深度", selection: $depth) {
+                        ForEach(CheckoutDepth.allCases, id: \.self) { option in
+                            Text(option.label).tag(option)
+                        }
                     }
+                    .pickerStyle(.menu)
+                    Text(depth.explanation)
+                        .font(.caption).foregroundStyle(.secondary)
                 }
-                .pickerStyle(.menu)
-                Text(depth.explanation)
-                    .font(.caption).foregroundStyle(.secondary)
             }
             Text("直接检出到所选的空文件夹，不包含 externals（外部引用）。\n未在 App 登录时，使用本机 SVN 已缓存的认证。")
                 .font(.caption).foregroundStyle(.secondary)
@@ -114,7 +135,10 @@ struct CheckoutView: View {
                 Button("取消", role: .cancel) { dismiss() }
                 Button("开始检出") {
                     guard let destination else { return }
-                    model.checkout(repository: browser.checkoutURL, destination: destination, depth: depth)
+                    model.checkout(
+                        repository: browser.checkoutURL, destination: destination, depth: depth,
+                        selectedDirectories: selectDirectories ? browser.selectedDirectories.sorted() : nil
+                    )
                     dismiss()
                 }
                 .buttonStyle(.borderedProminent)
@@ -179,20 +203,39 @@ struct CheckoutView: View {
                 } else {
                     LazyVStack(spacing: 2) {
                         ForEach(browser.entries) { entry in
-                            Button { withClient { browser.enter(entry, using: $0) } } label: {
-                                HStack(spacing: 10) {
-                                    Image(systemName: entry.isDirectory ? "folder" : "doc")
-                                        .foregroundStyle(.secondary)
-                                    Text(entry.name).lineLimit(1)
-                                    Spacer()
-                                    Text("r\(entry.revision)").font(.caption).foregroundStyle(.secondary)
-                                    if entry.isDirectory { Image(systemName: "chevron.right").font(.caption2) }
+                            HStack(spacing: 0) {
+                                if selectDirectories && entry.isDirectory {
+                                    Toggle("勾选 \(entry.name)", isOn: Binding(
+                                        get: { browser.selectedDirectories.contains(entry.name) },
+                                        set: { selected in
+                                            if selected {
+                                                browser.selectedDirectories.insert(entry.name)
+                                            } else {
+                                                browser.selectedDirectories.remove(entry.name)
+                                            }
+                                        }
+                                    ))
+                                    .toggleStyle(.checkbox)
+                                    .labelsHidden()
+                                    .accessibilityLabel("勾选 \(entry.name)")
+                                    .disabled(browser.isLoading)
+                                    .padding(.leading, 10)
                                 }
-                                .padding(10).contentShape(Rectangle())
+                                Button { withClient { browser.enter(entry, using: $0) } } label: {
+                                    HStack(spacing: 10) {
+                                        Image(systemName: entry.isDirectory ? "folder" : "doc")
+                                            .foregroundStyle(.secondary)
+                                        Text(entry.name).lineLimit(1)
+                                        Spacer()
+                                        Text("r\(entry.revision)").font(.caption).foregroundStyle(.secondary)
+                                        if entry.isDirectory { Image(systemName: "chevron.right").font(.caption2) }
+                                    }
+                                    .padding(10).contentShape(Rectangle())
+                                }
+                                .buttonStyle(SidebarActionStyle())
+                                .disabled(!entry.isDirectory || browser.isLoading)
+                                .accessibilityLabel(entry.isDirectory ? "进入 \(entry.name)" : entry.name)
                             }
-                            .buttonStyle(SidebarActionStyle())
-                            .disabled(!entry.isDirectory || browser.isLoading)
-                            .accessibilityLabel(entry.isDirectory ? "进入 \(entry.name)" : entry.name)
                         }
                     }
                     .padding(6)

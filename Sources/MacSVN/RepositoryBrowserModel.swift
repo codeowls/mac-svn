@@ -9,6 +9,7 @@ final class RepositoryBrowserModel: ObservableObject {
     @Published private(set) var entries: [RepositoryEntry] = []
     @Published private(set) var isLoading = false
     @Published private(set) var errorMessage: String?
+    @Published var selectedDirectories: Set<String> = []
     private var history: [String] = []
     private var request: Task<Void, Never>?
     private var requestID = UUID()
@@ -22,6 +23,7 @@ final class RepositoryBrowserModel: ObservableObject {
         cancel()
         location = nil
         entries = []
+        selectedDirectories = []
         history = []
         errorMessage = nil
     }
@@ -58,6 +60,7 @@ final class RepositoryBrowserModel: ObservableObject {
     /// Publish the address and listing together only after both remote reads succeed.
     private func load(_ url: String, using client: SVNClient, previous: String?, goingBack: Bool) {
         cancel()
+        selectedDirectories = []
         let id = requestID
         isLoading = true
         errorMessage = nil
