@@ -19,13 +19,16 @@ struct SettingsView: View {
             Picker("设置分类", selection: $tab) {
                 Text("设置").tag("engine")
                 Text("忽略").tag("ignores")
+                Text("合并工具").tag("merge")
             }
             .pickerStyle(.segmented)
-            .frame(width: 240)
+            .frame(width: 330)
 
             Group {
                 if tab == "engine" {
                     engineSettings
+                } else if tab == "merge" {
+                    MergeToolSettingsView()
                 } else {
                     ignoreSettings
                 }
@@ -33,25 +36,27 @@ struct SettingsView: View {
             .disabled(model.isBusy || isTesting)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
 
-            Divider()
-            HStack(alignment: .top) {
-                if isTesting {
-                    ProgressView().controlSize(.small)
-                    Text("正在检查 SVN…").font(.caption)
-                    Button("取消") { request?.cancel() }
-                } else {
-                    Text(model.isBusy ? "当前有操作正在进行，请完成后保存。" : feedback)
-                        .font(.caption)
-                        .foregroundStyle(isError ? Color.red : Color.secondary)
-                        .textSelection(.enabled)
-                        .fixedSize(horizontal: false, vertical: true)
+            if tab != "merge" {
+                Divider()
+                HStack(alignment: .top) {
+                    if isTesting {
+                        ProgressView().controlSize(.small)
+                        Text("正在检查 SVN…").font(.caption)
+                        Button("取消") { request?.cancel() }
+                    } else {
+                        Text(model.isBusy ? "当前有操作正在进行，请完成后保存。" : feedback)
+                            .font(.caption)
+                            .foregroundStyle(isError ? Color.red : Color.secondary)
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer(minLength: 16)
+                    Button("保存设置") { testExecutable(save: true) }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(model.isBusy || isTesting)
                 }
-                Spacer(minLength: 16)
-                Button("保存设置") { testExecutable(save: true) }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(model.isBusy || isTesting)
+                .frame(minHeight: 38)
             }
-            .frame(minHeight: 38)
         }
         .padding(24)
         .frame(width: 640, height: 490)

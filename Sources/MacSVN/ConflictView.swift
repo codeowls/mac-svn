@@ -39,6 +39,21 @@ struct ConflictView: View {
             if let error = model.conflictError {
                 Text(error).foregroundStyle(.red).font(.caption).textSelection(.enabled)
             }
+            if details.canMarkResolved {
+                DisclosureGroup("外部合并将使用的文件") {
+                    ForEach(details.files) { file in
+                        Text("\(file.title)：\(file.url.path)")
+                            .font(.caption).textSelection(.enabled)
+                    }
+                    Text("保存目标为当前工作文件；其余三个版本用作合并输入。")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            if let activity = model.externalMergeActivity,
+               activity.root == details.root, activity.path == details.entry.path {
+                Text(activity.message).font(.caption).textSelection(.enabled)
+                    .foregroundStyle(.secondary)
+            }
             Text("打开或关闭编辑器不会自动解除冲突。编辑完成后，检查最终工作文件并明确确认；标记解决仍不会自动提交。")
                 .font(.caption).foregroundStyle(.secondary)
             HStack {
@@ -47,23 +62,25 @@ struct ConflictView: View {
                 }
                 if details.canMarkResolved, details.files.contains(where: { $0.id == "working" }) {
                     Button("编辑工作文件") { openWorkingFile() }
+                    Button("外部合并…") { model.openExternalMerge(details) }
+                        .disabled(model.externalMergeActivity?.isRunning == true)
                 }
                 Button("重新读取") { model.inspectConflict(path: details.entry.path) }
                 Spacer()
                 Button("关闭") { model.conflictDetails = nil }.keyboardShortcut(.cancelAction)
                 Button("检查解决结果…") { model.prepareConflictResolution(details) }
                     .buttonStyle(.borderedProminent)
-                    .disabled(!details.canMarkResolved)
+                    .disabled(!details.canMarkResolved || model.isExternallyMerging(details))
             }
             .disabled(model.isBusy)
         }
         .padding(24)
-        .frame(width: 780, height: 610)
+        .frame(width: 900, height: 680)
         .onAppear {
             selectedFile = details.files.first(where: { $0.id == "prop-file" })?.id
                 ?? details.files.first?.id ?? "working"
         }
-        .task(id: selectedFile) {
+        .task(id: "\(details.id)/\(selectedFile)") {
             preview = "正在读取…"
             previewError = nil
             guard let file = details.files.first(where: { $0.id == selectedFile }) else { return }

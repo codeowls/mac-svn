@@ -46,6 +46,14 @@ struct DirectoryIgnoreDraft: Identifiable {
     let initialPatterns: String
 }
 
+struct ExternalMergeActivity {
+    let id = UUID()
+    let root: URL
+    let path: String
+    var isRunning = true
+    var message: String
+}
+
 private struct WorkingCopyDraftKey: Hashable {
     let path: String
     let repository: String
@@ -108,10 +116,12 @@ final class AppModel: ObservableObject {
     @Published var conflictDetails: ConflictDetails?
     @Published var conflictResolutionPlan: ConflictResolutionPlan?
     @Published var conflictError: String?
+    @Published private(set) var externalMergeActivity: ExternalMergeActivity?
     @Published private(set) var authenticationStore = SVNAuthenticationStore()
     @Published private(set) var isAuthenticating = false
     private var operationTask: Task<Void, Never>?
     private var diffTask: Task<Void, Never>?
+    private var externalMergeTask: Task<Void, Never>?
     private var workingCopyDrafts: [WorkingCopyDraftKey: WorkingCopyDraft] = [:]
 
     var isBusy: Bool { !operation.isEmpty || isAuthenticating }
@@ -412,8 +422,46 @@ final class AppModel: ObservableObject {
         }
     }
 
+    func isExternallyMerging(_ details: ConflictDetails) -> Bool {
+        externalMergeActivity?.isRunning == true && externalMergeActivity?.root == details.root
+            && externalMergeActivity?.path == details.entry.path
+    }
+
+    /// External editors have their own lifetime. Closing this sheet must not kill a user's IDE.
+    func openExternalMerge(_ details: ConflictDetails) {
+        guard !isBusy, externalMergeActivity?.isRunning != true,
+              conflictDetails?.id == details.id, workingCopy?.root == details.root else { return }
+        conflictError = nil
+        perform("准备外部合并", reportFailure: { self.conflictError = $0.localizedDescription }) {
+            guard let tool = ExternalMergeTool(rawValue: UserDefaults.standard.string(forKey: "externalMergeTool") ?? "") else {
+                throw SVNError("请先在设置的“合并工具”中选择并保存已安装的工具。")
+            }
+            let executable = try tool.executableURL(for: UserDefaults.standard.string(forKey: "externalMergeExecutable") ?? "")
+            let files = try await self.client().externalMergeFiles(details)
+            try Task.checkCancellation()
+            let activity = ExternalMergeActivity(root: details.root, path: details.entry.path,
+                message: "已请求打开 \(tool.title)。请在工具内保存并结束本次合并，再检查最终内容。")
+            self.externalMergeActivity = activity
+            // This task is deliberately independent of the cancellable SVN operation.
+            self.externalMergeTask = Task { @MainActor in
+                defer { self.externalMergeTask = nil }
+                do {
+                    let output = try await ProcessRunner.run(executable: executable,
+                        arguments: tool.arguments(for: files), directory: details.root)
+                    guard self.externalMergeActivity?.id == activity.id else { return }
+                    self.externalMergeActivity?.message = output.exitCode == 0
+                        ? "工具进程已返回，SVN 冲突状态尚未更改。请关闭本次合并窗口，重新读取并检查保存结果。"
+                        : "合并工具退出码 \(output.exitCode)，未标记解决。\n\(output.stderr)\(output.stdout)"
+                } catch {
+                    self.externalMergeActivity?.message = "无法启动合并工具：\(error.localizedDescription)"
+                }
+                self.externalMergeActivity?.isRunning = false
+            }
+        }
+    }
+
     func prepareConflictResolution(_ details: ConflictDetails) {
-        guard !isBusy, conflictDetails?.id == details.id else { return }
+        guard !isBusy, !isExternallyMerging(details), conflictDetails?.id == details.id else { return }
         conflictError = nil
         perform("检查解决结果", reportFailure: { error in
             self.conflictError = error.localizedDescription
@@ -425,6 +473,7 @@ final class AppModel: ObservableObject {
     /// 用户确认最终内容后才解除冲突；失败或取消仍重新读取状态，不自动重新提交。
     func confirmConflictResolution(_ plan: ConflictResolutionPlan) {
         guard !isBusy, conflictResolutionPlan?.id == plan.id,
+              !isExternallyMerging(plan.details),
               conflictDetails?.id == plan.details.id, workingCopy?.root == plan.details.root else { return }
         conflictResolutionPlan = nil
         conflictDetails = nil
