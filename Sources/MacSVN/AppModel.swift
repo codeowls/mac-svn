@@ -197,6 +197,19 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// 打开右键命中的副本目录，不切换当前 SVN 工作区。
+    func openInFinder(_ directory: URL) {
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: directory.path, isDirectory: &isDirectory),
+              isDirectory.boolValue else {
+            errorMessage = "工作副本目录不存在：\(directory.path)"
+            return
+        }
+        if !NSWorkspace.shared.open(directory) {
+            errorMessage = "无法在访达中打开：\(directory.path)"
+        }
+    }
+
     /// 副本切换及右键操作共用同一读取流程，成功读取后才替换当前工作区。
     private func readWorkingCopy(at directory: URL) async throws -> WorkingCopy {
         let client = try client()

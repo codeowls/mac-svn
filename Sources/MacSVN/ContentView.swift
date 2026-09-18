@@ -209,13 +209,15 @@ struct ContentView: View {
                                 Button {
                                     model.refresh(at: URL(fileURLWithPath: path))
                                 } label: {
-                                    Label("刷新", systemImage: "arrow.clockwise")
+                                    Label("刷新工作副本", systemImage: "arrow.clockwise")
+                                        .labelStyle(.titleAndIcon)
                                 }
                                 .disabled(model.isBusy)
                                 Button {
                                     model.update(at: URL(fileURLWithPath: path))
                                 } label: {
-                                    Label("更新", systemImage: "arrow.down.circle")
+                                    Label("更新工作副本", systemImage: "arrow.down.circle")
+                                        .labelStyle(.titleAndIcon)
                                 }
                                 .disabled(model.isBusy)
                                 Button {
@@ -226,8 +228,18 @@ struct ContentView: View {
                                 }
                                 .disabled(model.isBusy)
                                 Divider()
-                                Button("删除…", role: .destructive) {
+                                Button {
+                                    model.openInFinder(URL(fileURLWithPath: path))
+                                } label: {
+                                    Label("在访达中打开", systemImage: "folder")
+                                        .labelStyle(.titleAndIcon)
+                                }
+                                Divider()
+                                Button(role: .destructive) {
                                     recentPathPendingRemoval = path
+                                } label: {
+                                    Label("从最近列表中移除…", systemImage: "trash")
+                                        .labelStyle(.titleAndIcon)
                                 }
                                 .disabled(model.isBusy)
                                 .help("仅从最近列表删除，不删除本地文件")
