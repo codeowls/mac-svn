@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import SVNCore
 
@@ -35,7 +36,7 @@ struct HistoryView: View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    Text("提交历史").font(.headline)
+                    Label("提交历史", systemImage: "clock.arrow.circlepath").font(.headline)
                     Spacer()
                     if model.historyPath != "." {
                         Button("工作副本历史") { model.loadHistory() }.disabled(model.isBusy)
@@ -58,6 +59,7 @@ struct HistoryView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             .padding(14)
+            .background(Color.primary.opacity(0.025))
             Divider()
             switch model.historyState {
             case .idle:
@@ -89,6 +91,9 @@ struct HistoryView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .modifier(WorkspacePanel())
+        .padding(16)
         .onChange(of: model.historyFilter) { _, _ in model.reconcileHistorySelection() }
         .onChange(of: model.workingCopy?.root) { _, _ in diffRequest = nil }
         .sheet(item: $diffRequest) { HistoricalDiffView(request: $0) }
@@ -120,6 +125,7 @@ struct HistoryView: View {
             }
         }
         .padding(14)
+        .background(Color.primary.opacity(0.025))
     }
 
     private var historyContents: some View {
@@ -141,6 +147,9 @@ struct HistoryView: View {
                     .tag(log.revision)
                 }
             }
+            .listStyle(.inset)
+            .scrollContentBackground(.hidden)
+            .background(Color.primary.opacity(0.025))
             .frame(minWidth: 260, idealWidth: 340)
             if let log = selectedLog {
                 changedFiles(log)
@@ -153,61 +162,103 @@ struct HistoryView: View {
 
     /// 路径沿用仓库返回的绝对路径；复制来源单独展示，不将复制加删除猜测为重命名。
     private func changedFiles(_ log: LogEntry) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            if log.changedPaths.isEmpty {
-                ContentUnavailableView("没有可显示的变更路径", systemImage: "doc", description: Text("该记录未返回路径明细，可能受到仓库路径权限限制。"))
-            } else {
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 0) {
-                        ForEach(log.changedPaths) { change in
-                            Button {
-                                guard let copy = model.workingCopy else { return }
-                                do {
-                                    diffRequest = HistoricalDiffRequest(
-                                        change: change, revision: log.revision, directory: copy.root,
-                                        client: try model.client(for: copy.repositoryURL)
-                                    )
-                                } catch {
-                                    model.errorMessage = error.localizedDescription
-                                }
-                            } label: {
-                                HStack(alignment: .top, spacing: 10) {
-                                    Image(systemName: change.kind == "dir" ? "folder" : "doc.text")
-                                        .foregroundStyle(.secondary).padding(.top, 4)
-                                    VStack(alignment: .leading, spacing: 5) {
-                                        Text(change.path)
-                                            .font(.system(size: 12, design: .monospaced))
-                                            .multilineTextAlignment(.leading)
-                                            .fixedSize(horizontal: false, vertical: true)
-                                        Text(change.label).font(.caption).foregroundStyle(actionColor(change))
-                                        if let source = change.copyFromPath {
-                                            Text("复制自 \(source)\(change.copyFromRevision.map { " @ r\($0)" } ?? "")")
-                                                .font(.caption).foregroundStyle(.secondary)
-                                                .multilineTextAlignment(.leading)
-                                        }
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    Color.clear.frame(height: 0).id("history-detail-top")
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack {
+                            WorkspaceBadge(title: "r\(log.revision)", color: WorkspaceStyle.accent)
+                            Text(log.author.isEmpty ? "（未提供作者）" : log.author)
+                                .font(.subheadline.weight(.medium))
+                            Spacer(minLength: 0)
+                        }
+                        Text(formattedDate(log.date))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text(log.message.isEmpty ? "（无提交说明）" : log.message)
+                            .font(.body)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(16)
+                    Divider()
+                    HStack {
+                        Label("变更文件", systemImage: "doc.on.doc")
+                            .font(.headline)
+                        Spacer()
+                        Text("\(log.changedPaths.count) 项")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(12)
+                    if log.changedPaths.isEmpty {
+                        ContentUnavailableView("没有可显示的变更路径", systemImage: "doc", description: Text("该记录未返回路径明细，可能受到仓库路径权限限制。"))
+                    } else {
+                        LazyVStack(alignment: .leading, spacing: 0) {
+                            ForEach(log.changedPaths) { change in
+                                Button {
+                                    guard let copy = model.workingCopy else { return }
+                                    do {
+                                        diffRequest = HistoricalDiffRequest(
+                                            change: change, revision: log.revision, directory: copy.root,
+                                            client: try model.client(for: copy.repositoryURL)
+                                        )
+                                    } catch {
+                                        model.errorMessage = error.localizedDescription
                                     }
-                                    Spacer(minLength: 0)
-                                    Image(systemName: "chevron.right")
-                                        .font(.caption).foregroundStyle(.secondary)
-                                        .padding(.top, 4).accessibilityHidden(true)
+                                } label: {
+                                    HStack(alignment: .top, spacing: 10) {
+                                        Image(systemName: change.kind == "dir" ? "folder" : "doc.text")
+                                            .foregroundStyle(.secondary)
+                                            .padding(.top, 4)
+                                        VStack(alignment: .leading, spacing: 5) {
+                                            WorkspacePathLabel(path: change.path)
+                                            if let source = change.copyFromPath {
+                                                Text("复制自 \(source)\(change.copyFromRevision.map { " @ r\($0)" } ?? "")")
+                                                    .font(.caption)
+                                                    .foregroundStyle(.secondary)
+                                                    .multilineTextAlignment(.leading)
+                                            }
+                                        }
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        WorkspaceBadge(title: change.label, color: actionColor(change))
+                                            .fixedSize()
+                                        Image(systemName: "chevron.right")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                            .padding(.top, 4)
+                                            .accessibilityHidden(true)
+                                    }
+                                    .padding(12)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .contentShape(Rectangle())
                                 }
-                                .padding(12)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                // 让图标、文字、行内留白和箭头共享同一点击区域。
-                                .contentShape(Rectangle())
+                                .buttonStyle(.plain)
+                                .disabled(model.isBusy)
+                                .background(hoveredPath == change.path && !model.isBusy ? Color.primary.opacity(0.05) : .clear)
+                                .onHover { entered in
+                                    hoveredPath = entered ? change.path : nil
+                                }
+                                .help(change.path)
+                                .accessibilityLabel("\(change.path)、\(change.label)")
+                                .accessibilityHint("查看该路径在此次提交中的差异")
+                                .contextMenu {
+                                    Button("复制完整路径") {
+                                        NSPasteboard.general.clearContents()
+                                        NSPasteboard.general.setString(change.path, forType: .string)
+                                    }
+                                }
+                                Divider()
                             }
-                            .buttonStyle(.plain)
-                            .disabled(model.isBusy)
-                            .background(hoveredPath == change.path && !model.isBusy ? Color.primary.opacity(0.05) : .clear)
-                            .onHover { entered in
-                                hoveredPath = entered ? change.path : nil
-                            }
-                            .help("点击此行查看差异")
-                            .accessibilityHint("查看该路径在此次提交中的差异")
-                            Divider()
                         }
                     }
                 }
+            }
+            // 保持分栏视图身份稳定，只重置详情滚动位置。
+            .onChange(of: log.revision) { _, _ in
+                proxy.scrollTo("history-detail-top", anchor: .top)
             }
         }
         .frame(minWidth: 340, maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)

@@ -17,7 +17,11 @@ struct FileOperationView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("SVN \(draft.operation.title)").font(.title2.bold())
+            WorkspaceHeading(
+                title: "SVN \(draft.operation.title)",
+                icon: draft.operation == .delete ? "trash" : "pencil",
+                color: draft.operation == .delete ? .red : WorkspaceStyle.accent
+            )
             Text(draft.path).font(.headline).textSelection(.enabled)
             if let plan = model.fileOperationPlan {
                 if let destination = plan.destination {
@@ -36,6 +40,8 @@ struct FileOperationView: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                .padding(12)
+                .modifier(WorkspacePanel())
                 DisclosureGroup("查看当前状态与差异") {
                     OperationOutputView(text: plan.preview, followsOutput: false)
                         .frame(height: 160)
@@ -44,6 +50,7 @@ struct FileOperationView: View {
             } else {
                 if draft.operation == .rename {
                     TextField("新名称", text: $newName)
+                        .textFieldStyle(.roundedBorder)
                     Text("保留所在目录，仅修改名称。后续确认会列出源路径、目标路径和目录子项。")
                         .font(.caption).foregroundStyle(.secondary)
                 } else {
@@ -55,12 +62,12 @@ struct FileOperationView: View {
                 Text(error).font(.caption).foregroundStyle(.red).textSelection(.enabled)
             }
             HStack {
+                Spacer()
                 Button("取消", role: .cancel) {
                     model.fileOperationDraft = nil
                     model.fileOperationPlan = nil
                 }
                     .keyboardShortcut(.cancelAction)
-                Spacer()
                 if let plan = model.fileOperationPlan {
                     Button("返回检查") {
                         model.fileOperationPlan = nil
@@ -69,7 +76,9 @@ struct FileOperationView: View {
                     Button("确认\(draft.operation.title)", role: draft.operation == .delete ? .destructive : nil) {
                         model.confirmFileOperation(plan)
                     }
-                    .buttonStyle(.borderedProminent).disabled(!confirmed)
+                    .buttonStyle(.borderedProminent)
+                    .tint(draft.operation == .delete ? .red : WorkspaceStyle.accent)
+                    .disabled(!confirmed)
                 } else {
                     Button("检查影响范围") { model.prepareFileOperation(draft, newName: newName) }
                         .buttonStyle(.borderedProminent)
@@ -79,6 +88,7 @@ struct FileOperationView: View {
         }
         .padding(24)
         .frame(width: 720, height: 570)
+        .modifier(WorkspaceBackground())
         .onAppear { newName = (draft.path as NSString).lastPathComponent }
     }
 }
@@ -89,7 +99,7 @@ struct CommitReviewView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("确认提交范围：\(plan.items.count) 项").font(.title2.bold())
+            WorkspaceHeading(title: "确认提交范围：\(plan.items.count) 项", icon: "checklist")
             Text("目录删除、替换和带历史复制会包含子项；移动两端及尚未提交的父目录也必须一并提交。以下为本次实际范围，返回后可重新选择。")
                 .font(.callout)
             Text(model.workingCopy?.repositoryURL ?? "").font(.caption).textSelection(.enabled)
@@ -102,6 +112,8 @@ struct CommitReviewView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .padding(12)
+            .modifier(WorkspacePanel())
             Text(plan.message).textSelection(.enabled)
             HStack {
                 Spacer()
@@ -112,5 +124,6 @@ struct CommitReviewView: View {
         }
         .padding(24)
         .frame(width: 700, height: 520)
+        .modifier(WorkspaceBackground())
     }
 }

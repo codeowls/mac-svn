@@ -21,11 +21,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 struct MacSVNApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @StateObject private var model = AppModel()
+    @AppStorage("workspaceAppearance") private var appearance = "system"
+
+    private var preferredColorScheme: ColorScheme? {
+        switch appearance {
+        case "light": .light
+        case "dark": .dark
+        default: nil
+        }
+    }
 
     var body: some Scene {
         Window("Mac SVN", id: "main") {
             ContentView(model: model)
                 .frame(minWidth: 1000, minHeight: 680)
+                .preferredColorScheme(preferredColorScheme)
         }
         .defaultSize(width: 1250, height: 800)
         .commands {
@@ -33,6 +43,13 @@ struct MacSVNApp: App {
                 Button("打开工作副本…") { model.chooseWorkingCopy() }
                     .keyboardShortcut("o")
                     .disabled(model.isBusy)
+            }
+            CommandGroup(after: .sidebar) {
+                Picker("外观", selection: $appearance) {
+                    Text("跟随系统").tag("system")
+                    Text("浅色").tag("light")
+                    Text("深色").tag("dark")
+                }
             }
             CommandMenu("SVN") {
                 Button("刷新本地状态") { model.refresh() }
@@ -46,6 +63,7 @@ struct MacSVNApp: App {
         }
         Settings {
             SettingsView(model: model)
+                .preferredColorScheme(preferredColorScheme)
         }
     }
 }

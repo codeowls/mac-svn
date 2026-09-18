@@ -13,8 +13,8 @@ Requires macOS 14 or later. Supports Apple Silicon and Intel.
 
 本版采用 ad-hoc 签名，尚无 Developer ID 签名及 Apple 公证。
 This release is ad-hoc signed, without Developer ID signing or Apple notarization.
-macOS 可能阻止首次打开；请先核对下载来源与 SHA256 校验值，再按 Apple 指引处理：
-macOS may block the first launch. Verify the source and SHA256 checksums, then consult:
+macOS 可能阻止首次打开；请先核对下载来源，再按 Apple 指引处理：
+macOS may block the first launch. Verify the download source, then consult:
 https://support.apple.com/102445
 无需关闭系统 Gatekeeper。/ Do not disable Gatekeeper system-wide.
 

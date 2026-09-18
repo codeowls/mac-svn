@@ -39,7 +39,5 @@ jobs:
           VERSION="$(cat VERSION)"
           gh release create "$RELEASE_TAG" --verify-tag --draft \
             --title "Mac SVN $VERSION" --notes-file "release-notes/$VERSION.txt" \
-            "dist/releases/$VERSION/Mac-SVN-$VERSION-universal.dmg" \
-            "dist/releases/$VERSION/Mac-SVN-$VERSION-universal.zip" \
-            "dist/releases/$VERSION/SHA256SUMS.txt"
+            "dist/releases/$VERSION/Mac-SVN-$VERSION-universal.dmg"
           gh release edit "$RELEASE_TAG" --draft=false --latest

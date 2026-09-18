@@ -8,7 +8,7 @@ struct RevertReviewView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("确认还原 \(plan.items.count) 个项目").font(.title2.bold())
+            WorkspaceHeading(title: "确认还原 \(plan.items.count) 个项目", icon: "arrow.uturn.backward", color: .red)
             Text(plan.root.path).font(.caption).textSelection(.enabled)
             Text("下面列出的未提交修改将永久丢弃，SVN 无法撤销此操作。还原只影响本地，不更改仓库提交历史。")
                 .foregroundStyle(.red)
@@ -31,6 +31,8 @@ struct RevertReviewView: View {
                     }
                 }
             }
+            .padding(12)
+            .modifier(WorkspacePanel())
             HStack {
                 Spacer()
                 Button("取消", role: .cancel, action: onCancel).keyboardShortcut(.cancelAction)
@@ -40,5 +42,6 @@ struct RevertReviewView: View {
         }
         .padding(24)
         .frame(width: 680, height: 520)
+        .modifier(WorkspaceBackground())
     }
 }

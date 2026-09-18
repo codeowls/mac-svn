@@ -47,9 +47,10 @@ struct HistoricalDiffView: View {
                 text: failure ?? comparison?.text ?? "正在读取…",
                 oldLabel: comparison?.oldLabel ?? "读取比较版本中…",
                 newLabel: comparison?.newLabel ?? "r\(request.revision)",
-                footer: comparison.map { "\($0.oldLabel) → \($0.newLabel) · 只读" } ?? "历史查看不会修改工作副本"
+                footer: comparisonSummary
             )
         }
+        .modifier(WorkspaceBackground())
         .task(id: attempt) {
             comparison = nil
             failure = nil
@@ -71,6 +72,19 @@ struct HistoricalDiffView: View {
         }
         .background(ViewWindowReader { exportWindow = $0 })
         .onDisappear { exportTask?.cancel() }
+    }
+
+    /// 从实际比较版本生成摘要，保留新增、删除及复制来源含义，不重复长路径。
+    private var comparisonSummary: String {
+        guard comparison != nil, let versions else {
+            return "历史查看不会修改工作副本"
+        }
+        let before = versions.before.map {
+            "r\($0.revision)" + ($0.isCopySource ? "（复制来源）" : "")
+        } ?? "前版本不存在"
+        let after = versions.after.map { "r\($0.revision)" }
+            ?? "r\(request.revision)（已删除）"
+        return "\(before) → \(after) · 只读"
     }
 
     private func exportBar(_ versions: HistoricalFileVersions) -> some View {
@@ -108,6 +122,7 @@ struct HistoricalDiffView: View {
         }
         .font(.caption)
         .padding(12)
+        .background(.bar)
     }
 
     /// 用户选择位置后才读取并保存；完整读取成功前不触碰目标，关闭弹窗会取消在途导出。

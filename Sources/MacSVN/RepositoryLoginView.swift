@@ -13,7 +13,7 @@ struct RepositoryLoginView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text("登录 SVN 仓库").font(.title2.bold())
+            WorkspaceHeading(title: "登录 SVN 仓库", icon: "person.crop.circle")
             Text(repository)
                 .font(.callout).textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
@@ -28,13 +28,21 @@ struct RepositoryLoginView: View {
                     .accessibilityLabel("SVN 密码")
                     .onSubmit { login() }
             }
+            .padding(16)
+            .modifier(WorkspacePanel())
             .disabled(isLoading)
             Text("密码仅用于本次 App 会话，退出后需重新登录。登录成功表示可以读取仓库，提交仍由服务器检查写权限。")
                 .font(.caption).foregroundStyle(.secondary)
             if let errorMessage {
-                Text(errorMessage).foregroundStyle(.red)
-                    .font(.callout).textSelection(.enabled)
-                    .fixedSize(horizontal: false, vertical: true)
+                ScrollView {
+                    Text(errorMessage)
+                        .foregroundStyle(.red)
+                        .font(.callout)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxHeight: 100)
             }
             HStack {
                 if isLoading {
@@ -54,6 +62,7 @@ struct RepositoryLoginView: View {
         }
         .padding(24)
         .frame(width: 480)
+        .modifier(WorkspaceBackground())
         .onAppear {
             username = model.authenticationStore.authentication(for: repository)?.username ?? ""
         }

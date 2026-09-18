@@ -11,7 +11,7 @@ struct ConflictView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("冲突详情").font(.title2.bold())
+            WorkspaceHeading(title: "冲突详情", icon: "exclamationmark.triangle", color: .orange)
             Text(details.entry.path).font(.headline).textSelection(.enabled)
             ForEach(Array(details.summary.enumerated()), id: \.offset) { _, line in
                 Text(line).font(.caption).textSelection(.enabled)
@@ -31,6 +31,8 @@ struct ConflictView: View {
                     }
                     OperationOutputView(text: preview, followsOutput: false, accessibilityLabel: "冲突版本内容")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .padding(8)
+                        .modifier(WorkspacePanel())
                 }
             } else {
                 Text("该冲突没有可查看的本地辅助文件。")
@@ -76,6 +78,7 @@ struct ConflictView: View {
         }
         .padding(24)
         .frame(width: 900, height: 680)
+        .modifier(WorkspaceBackground())
         .onAppear {
             selectedFile = details.files.first(where: { $0.id == "prop-file" })?.id
                 ?? details.files.first?.id ?? "working"
@@ -126,7 +129,7 @@ private struct ConflictResolutionView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("检查最终工作文件").font(.title2.bold())
+            WorkspaceHeading(title: "检查最终工作文件", icon: "doc.text.magnifyingglass")
             Text(plan.details.entry.path).font(.headline).textSelection(.enabled)
             Text("将保留下面的当前内容并解除该文件的内容冲突。SVN 会移除该冲突的辅助文件；其他文件及属性／树冲突不会一起解决。")
                 .font(.callout)
@@ -136,6 +139,8 @@ private struct ConflictResolutionView: View {
             }
             OperationOutputView(text: plan.preview, followsOutput: false, accessibilityLabel: "最终工作文件")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(8)
+                .modifier(WorkspacePanel())
             Toggle("我已检查最终内容，确认采用当前工作文件", isOn: $confirmed)
             HStack {
                 Spacer()
@@ -147,5 +152,6 @@ private struct ConflictResolutionView: View {
         }
         .padding(24)
         .frame(width: 720, height: 510)
+        .modifier(WorkspaceBackground())
     }
 }

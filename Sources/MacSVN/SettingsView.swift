@@ -15,7 +15,7 @@ struct SettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text("SVN 设置").font(.title2.bold())
+            WorkspaceHeading(title: "SVN 设置", icon: "gearshape")
             Picker("设置分类", selection: $tab) {
                 Text("设置").tag("engine")
                 Text("忽略").tag("ignores")
@@ -34,7 +34,9 @@ struct SettingsView: View {
                 }
             }
             .disabled(model.isBusy || isTesting)
+            .padding(16)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .modifier(WorkspacePanel())
 
             if tab != "merge" {
                 Divider()
@@ -59,7 +61,8 @@ struct SettingsView: View {
             }
         }
         .padding(24)
-        .frame(width: 640, height: 490)
+        .frame(width: 640, height: 560)
+        .modifier(WorkspaceBackground())
         .onAppear { loadSavedSettings() }
         .onDisappear { request?.cancel() }
         .onChange(of: executablePath) { _, _ in clearFeedback() }

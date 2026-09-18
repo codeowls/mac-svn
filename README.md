@@ -8,9 +8,9 @@ A native macOS Subversion client built with SwiftUI. Review changes, browse hist
 
 ## 界面预览 / Screenshots
 
-以下为原应用的真实截图，仅使用本地演示仓库和 `demo` 作者；包含私人工作副本的侧栏已隐藏，未展示业务地址、账号或个人目录。应用界面目前为简体中文。
+以下为原应用的真实截图，仅使用本地演示仓库和 `demo` 作者；侧栏仅展示演示工作副本，未展示业务地址、账号或个人目录。应用界面目前为简体中文。
 
-Real screenshots of the app using a local demo repository and the author `demo`. The sidebar containing private working copies is hidden; no business server addresses, accounts, or personal directories are shown. The app UI is currently in Simplified Chinese.
+Real screenshots of the app using a local demo repository and the author `demo`. The sidebar shows only the demo working copy; no business server addresses, accounts, or personal directories are shown. The app UI is currently in Simplified Chinese.
 
 ### 欢迎页 / Welcome
 
@@ -20,9 +20,9 @@ Real screenshots of the app using a local demo repository and the author `demo`.
 
 ![工作区 / Working copy](assets/screenshots/working-copy.jpg)
 
-### 并排差异 / Side-by-side diff
+### 文件差异 / File diff
 
-![并排差异 / Side-by-side diff](assets/screenshots/diff.jpg)
+![文件差异 / File diff](assets/screenshots/diff.jpg)
 
 ### 提交历史 / Revision history
 
@@ -30,19 +30,17 @@ Real screenshots of the app using a local demo repository and the author `demo`.
 
 ## 简体中文
 
-当前版本为 **1.1.0**，面向日常 SVN 工作副本管理。源码采用 MIT 协议；应用尚未完成正式签名、公证和跨设备兼容性验证。
+当前版本为 **1.2.0**，面向日常 SVN 工作副本管理。源码采用 MIT 协议；应用尚未完成正式签名、公证和跨设备兼容性验证。
 
 ## 下载与安装
 
-前往 [GitHub Releases](https://github.com/codeowls/mac-svn/releases/latest) 下载，或直接选择 **1.1.0** 安装包：
+前往 [GitHub Releases](https://github.com/codeowls/mac-svn/releases/latest) 下载，或直接选择 **1.2.0** 安装包：
 
-- [DMG 安装包（推荐）](https://github.com/codeowls/mac-svn/releases/download/v1.1.0/Mac-SVN-1.1.0-universal.dmg)：打开后将 **Mac SVN.app** 拖入 **Applications（应用程序）**。
-- [ZIP 压缩包](https://github.com/codeowls/mac-svn/releases/download/v1.1.0/Mac-SVN-1.1.0-universal.zip)：解压后将 App 移入应用程序文件夹。
-- [SHA256 校验文件](https://github.com/codeowls/mac-svn/releases/download/v1.1.0/SHA256SUMS.txt)：与安装包放在同一目录，运行 `shasum -a 256 -c SHA256SUMS.txt`；只下载一种安装包时，另一项会提示文件缺失，请核对已下载项显示 `OK`。
+- [DMG 安装包（推荐）](https://github.com/codeowls/mac-svn/releases/download/v1.2.0/Mac-SVN-1.2.0-universal.dmg)：打开后将 **Mac SVN.app** 拖入 **Applications（应用程序）**。
 
 安装包要求 **macOS 14+**，同时包含 **Apple Silicon / Intel** 架构，无需安装 Swift 或 Xcode。已在 Apple Silicon 验收；Intel 已完成构建，尚未进行 Intel 实机验收。App 仍需本机 **Subversion 1.14+**；已安装 Homebrew 时运行 `brew install subversion`，启动后可在设置中检测或指定 SVN 路径。应用界面目前为简体中文。
 
-**签名说明：**本版为 ad-hoc 签名，尚无 Developer ID 签名和 Apple 公证，macOS 可能阻止首次打开。请先核对来源与校验值，再参考 [Apple 官方打开指引](https://support.apple.com/102445)。无需关闭系统 Gatekeeper。
+**签名说明：**本版为 ad-hoc 签名，尚无 Developer ID 签名和 Apple 公证，macOS 可能阻止首次打开。请先核对下载来源，再参考 [Apple 官方打开指引](https://support.apple.com/102445)。无需关闭系统 Gatekeeper。
 
 ## 从源码运行
 
@@ -68,7 +66,7 @@ open "dist/Mac SVN.app"
 
 构建脚本默认将 SwiftPM 并行任务数和编译器线程数均设为 2，以降低本机负载；这不是严格的 CPU 占用上限。可用 `SWIFT_BUILD_JOBS=1 bash scripts/build-app.sh` 进一步降低并发，或按需增加该正整数。通用包的两个架构依次构建，`package-release.sh` 也沿用此设置。正式安装包可由下述 GitHub Actions 发布流程构建，无需在本机重复打包。
 
-运行 `bash scripts/package-release.sh` 生成通用架构 DMG、ZIP 和 SHA256 校验文件，输出到 `dist/releases/1.1.0/`；已有同版本输出时拒绝覆盖。维护者更新 `VERSION` 及 `release-notes/<版本>.txt` 后推送对应 `v<版本>` 标签，发布工作流会校验标签、构建验证安装包、上传附件后公开 Release。
+运行 `bash scripts/package-release.sh` 生成通用架构 DMG 和本地 SHA256 校验文件，输出到 `dist/releases/1.2.0/`；已有同版本输出时拒绝覆盖。维护者更新 `VERSION` 及 `release-notes/<版本>.txt` 后推送对应 `v<版本>` 标签，发布工作流会校验标签、构建验证安装包、上传附件后公开 Release。
 
 打包时自动生成并嵌入原生 App 图标；源图和图标说明位于 [`assets/`](assets/README.md)。通过打包后的 `.app` 启动可使用该图标。打包脚本会刷新该 App 的 Launch Services 注册，启动时重新载入 Dock 图标；重建后请退出旧进程再打开 `dist/Mac SVN.app`。`swift run` 是裸可执行文件调试入口，不包含 `.app` 的图标和语言声明。
 
@@ -77,6 +75,10 @@ open "dist/Mac SVN.app"
 工具栏和分栏使用系统原生外观。要采用 Liquid Glass，请使用包含 macOS 26 或更新 SDK 的工具链打包，并在 macOS 26 或更新系统运行；最低运行要求仍为 macOS 14。打包脚本会将实际 SDK 版本写入链接信息，避免被误标为最低系统版本。当前 CI 使用 Xcode 16.4，仅验证原有系统兼容构建，不代表 Liquid Glass 外观验收。
 
 ## 当前功能
+
+- 统一的原生工作台样式；在“显示 → 外观”选择跟随系统、浅色或深色，仅影响此应用。
+- 提交说明可折叠，首次勾选自动展开；折叠保留会话草稿。紧凑列表显示文件类型与状态标签。
+- 历史详情完整显示提交说明、作者和时间；文件名与目录分层显示，支持复制完整路径，差异底部精简为版本范围。
 
 - 设置中支持选择 SVN 可执行文件、自动检测常见安装位置及测试版本；保存前检查 SVN 1.14+，编辑草稿不会提前改变当前配置。
 - 切换工作副本时，在当前 App 会话内分别保留提交说明、路径筛选、已选项目、显示忽略项开关及历史查询范围／筛选；返回副本时重新核对状态，已提交或已忽略项目不会恢复为选中。提交成功清空对应草稿，移除最近记录会丢弃该副本草稿，退出 App 后草稿不保留。
@@ -91,7 +93,7 @@ open "dist/Mac SVN.app"
 - 将未跟踪文件或目录添加到版本控制；添加目录时不递归添加子项。
 - 勾选文件、填写说明、检查清单后提交；提交前重新校验状态。
 - 点击冲突项目查看类型、操作、原基准／传入版本及真实辅助文件；内容冲突可用默认编辑器打开工作文件，保存后重新读取并检查最终内容。明确确认后才采用当前文件标记解决，确认期间内容或冲突状态变化会拒绝执行；完成后重新读取 SVN 状态，仍需单独提交。属性和树冲突仅提供详情，需用 SVN 命令行或专用工具处理。
-- 当前源码新增外部三方合并入口（v1.1.0 安装包尚未包含）：在“设置 → 合并工具”选择工具并保存安装路径，再从冲突详情打开。提供 IntelliJ IDEA、VS Code、Beyond Compare、Kaleidoscope、KDiff3、FileMerge 的命令行预设；IDEA 已实测启动、取消及保存，其他预设尚待各工具实机验收。工具需自行安装，FileMerge 需要完整 Xcode。启动前重新核对冲突和四个文件，工具退出不会自动解决或提交；保存并关闭合并窗口后，返回检查最终内容并确认。日常差异查看仍使用内置视图。
+- 支持外部三方合并入口：在“设置 → 合并工具”选择工具并保存安装路径，再从冲突详情打开。提供 IntelliJ IDEA、VS Code、Beyond Compare、Kaleidoscope、KDiff3、FileMerge 的命令行预设；IDEA 已实测启动、取消及保存，其他预设尚待各工具实机验收。工具需自行安装，FileMerge 需要完整 Xcode。启动前重新核对冲突和四个文件，工具退出不会自动解决或提交；保存并关闭合并窗口后，返回检查最终内容并确认。日常差异查看仍使用内置视图。
 - 更新工作副本，产生冲突时保留冲突供后续处理。更新与提交自动展开真实 SVN 输出，显示耗时及进行中／完成／失败／取消状态；失败或取消保留日志，提交结果不明时提示先核实历史。
 - 支持文件和目录的 SVN 重命名、删除：变更项右键操作，或通过“文件操作”选择未修改的项目。操作前列出完整影响范围；目录删除包含其中的未提交修改、未受控和已忽略文件。确认期间内容、属性或范围变化会拒绝执行；嵌套副本和冲突需先单独处理。重命名保留已有历史关联，删除／重命名不自动提交。
 - 选中项目后可还原，执行前展示目标、实际差异及影响，明确确认后才丢弃修改。确认时重新核对状态、属性和内容（含二进制），发生变化则拒绝执行；还原后重新读取状态。普通新增文件撤销新增安排但保留本地内容，带历史复制文件会被删除。
@@ -174,19 +176,17 @@ scripts/build-app.sh  本地 .app 打包
 
 ## English
 
-**Version 1.1.0.** Mac SVN is a native SwiftUI client for everyday Subversion work. Source code is available under the MIT License. The app has not yet completed release signing, notarization, or cross-device compatibility validation.
+**Version 1.2.0.** Mac SVN is a native SwiftUI client for everyday Subversion work. Source code is available under the MIT License. The app has not yet completed release signing, notarization, or cross-device compatibility validation.
 
 ### Download and install
 
-Visit [GitHub Releases](https://github.com/codeowls/mac-svn/releases/latest), or download **1.1.0** directly:
+Visit [GitHub Releases](https://github.com/codeowls/mac-svn/releases/latest), or download **1.2.0** directly:
 
-- [DMG installer (recommended)](https://github.com/codeowls/mac-svn/releases/download/v1.1.0/Mac-SVN-1.1.0-universal.dmg): open it and drag **Mac SVN.app** into **Applications**.
-- [ZIP archive](https://github.com/codeowls/mac-svn/releases/download/v1.1.0/Mac-SVN-1.1.0-universal.zip): extract it and move the app into Applications.
-- [SHA256 checksums](https://github.com/codeowls/mac-svn/releases/download/v1.1.0/SHA256SUMS.txt): place beside the downloads and run `shasum -a 256 -c SHA256SUMS.txt`. If you downloaded only one package, the other will be reported missing; verify that your downloaded file shows `OK`.
+- [DMG installer (recommended)](https://github.com/codeowls/mac-svn/releases/download/v1.2.0/Mac-SVN-1.2.0-universal.dmg): open it and drag **Mac SVN.app** into **Applications**.
 
 Requires **macOS 14+** and local **Subversion 1.14+**. Both **Apple Silicon and Intel** architectures are included; Swift/Xcode is not required. Apple Silicon runtime checks passed; Intel is built but has not been tested on physical Intel hardware. With Homebrew already installed, run `brew install subversion`; the SVN path can be selected in app Settings. The app interface is Simplified Chinese.
 
-**Signing:** this release is ad-hoc signed, without Developer ID signing or Apple notarization. macOS may block its first launch. Verify the source and checksums, then follow [Apple's official guidance](https://support.apple.com/102445). Do not disable Gatekeeper system-wide.
+**Signing:** this release is ad-hoc signed, without Developer ID signing or Apple notarization. macOS may block its first launch. Verify the download source, then follow [Apple's official guidance](https://support.apple.com/102445). Do not disable Gatekeeper system-wide.
 
 ### Run from source
 
@@ -213,16 +213,20 @@ The script builds for the local architecture, embeds the app icon and language d
 
 Build scripts default to 2 SwiftPM jobs and 2 compiler threads to reduce local load; this is not a strict CPU usage cap. Use `SWIFT_BUILD_JOBS=1 bash scripts/build-app.sh` to reduce concurrency further, or choose another positive integer. Universal builds process architectures sequentially, and `package-release.sh` inherits the same setting. The GitHub Actions release workflow can build distribution packages without repeating that work locally.
 
-Use `bash scripts/build-app.sh --universal` for both architectures, or `bash scripts/package-release.sh` to produce DMG, ZIP, and checksums in `dist/releases/1.1.0/`. Existing release output is not overwritten. The version comes from `VERSION`; packages use ad-hoc signing without Developer ID signing or Apple notarization. Running `swift run` starts a bare executable without the bundle's icon and language configuration.
+Use `bash scripts/build-app.sh --universal` for both architectures, or `bash scripts/package-release.sh` to produce DMG and local checksums in `dist/releases/1.2.0/`. Existing release output is not overwritten. The version comes from `VERSION`; packages use ad-hoc signing without Developer ID signing or Apple notarization. Running `swift run` starts a bare executable without the bundle's icon and language configuration.
 
 Liquid Glass appearance requires a macOS 26+ SDK and macOS 26+ at runtime; the minimum deployment target remains macOS 14. The build script records the actual linked SDK. CI uses Xcode 16.4 and checks the compatibility build, not Liquid Glass appearance.
 
 ### Features
 
+- Consistent native workspace styling with System, Light, and Dark appearance options in the View menu.
+- Collapsible commit messages preserve session drafts and expand when files are first selected. Compact file rows show type icons and status badges.
+- Full revision details show the message, author, and date. File names and directories are separated; full paths can be copied and diff footers show concise revision ranges.
+
 - Open existing working copies or browse a remote repository and check out a selected branch into a new or empty directory. Existing nonempty directories are not overwritten; externals are excluded.
 - Keep recent working copies and repository addresses. Removing a recent entry requires confirmation and does not delete local files.
 - Inspect conflict types, operations, base/incoming revisions, and actual conflict files. Open the working file in its default editor, review the saved result, and explicitly confirm before marking a file-content conflict resolved. Content or conflict changes after review require a new review. SVN status is read back; committing remains a separate action. Property and tree conflicts are read-only and require SVN or a dedicated tool.
-- Current source adds external three-way merging (not included in the v1.1.0 downloads): choose a tool and save its installation path in Settings → Merge Tools, then launch it from conflict details. CLI presets cover IntelliJ IDEA, VS Code, Beyond Compare, Kaleidoscope, KDiff3, and FileMerge. IDEA launch, cancellation, and saving have been exercised; other presets still require acceptance with the respective applications. Install tools separately; FileMerge requires full Xcode. Conflict identity and all four files are rechecked before launch. Exiting the tool never resolves or commits automatically: save and close its merge window, then review and explicitly confirm in Mac SVN. Ordinary diffs continue to use the built-in viewer.
+- External three-way merging: choose a tool and save its installation path in Settings → Merge Tools, then launch it from conflict details. CLI presets cover IntelliJ IDEA, VS Code, Beyond Compare, Kaleidoscope, KDiff3, and FileMerge. IDEA launch, cancellation, and saving have been exercised; other presets still require acceptance with the respective applications. Install tools separately; FileMerge requires full Xcode. Conflict identity and all four files are rechecked before launch. Exiting the tool never resolves or commits automatically: save and close its merge window, then review and explicitly confirm in Mac SVN. Ordinary diffs continue to use the built-in viewer.
 - Review and filter local changes, including content, properties, missing files, and conflicts. Unversioned files are clearly distinguished from versioned changes.
 - Inspect unified or side-by-side text diffs with line numbers, change counts, and navigation between changed sections. Binary files, including Word documents, show an explicit limitation message with expandable original SVN diagnostics and property changes.
 - Rename or delete files and directories through context menus or the File Operations picker. Review all affected paths before confirming; directory deletion includes modified, unversioned, and ignored contents. Changes after review require a new review. Nested working copies and conflicts need separate handling. Rename preserves existing history; neither operation commits automatically.

@@ -47,8 +47,8 @@ struct DiffContentView: View {
                         .frame(width: 150)
                         .labelsHidden()
                         .accessibilityLabel("展示方式")
-                        Text("+\(document.additions)").foregroundStyle(.green)
-                        Text("−\(document.deletions)").foregroundStyle(.red)
+                        WorkspaceBadge(title: "+\(document.additions)", color: .green)
+                        WorkspaceBadge(title: "−\(document.deletions)", color: .red)
                         Spacer()
                         Text("\(hunkIndex + 1) / \(document.hunkIDs.count) 处变更")
                             .foregroundStyle(.secondary)
@@ -67,6 +67,7 @@ struct DiffContentView: View {
                     }
                     .font(.system(size: 12, design: .monospaced))
                     .padding(12)
+                    .background(.bar)
                     Divider()
                 }
                 if sideBySide && !document.hunkIDs.isEmpty {
@@ -76,6 +77,7 @@ struct DiffContentView: View {
                     }
                     .font(.caption.weight(.medium))
                     .padding(.horizontal, 16).padding(.vertical, 8)
+                    .background(Color.primary.opacity(0.035))
                     Divider()
                 }
                 GeometryReader { geometry in
@@ -120,6 +122,9 @@ struct DiffContentView: View {
                     hunkIndex = 0
                 }
             }
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .modifier(WorkspacePanel())
+            .padding(12)
             Divider()
             HStack {
                 Text(footer)
@@ -130,20 +135,29 @@ struct DiffContentView: View {
             .padding(12)
         }
         .frame(minWidth: 850, idealWidth: 1050, minHeight: 540, idealHeight: 680)
+        .modifier(WorkspaceBackground())
         .onAppear { updateDocument() }
         .onChange(of: text) { _, _ in updateDocument() }
     }
 
     private var header: some View {
         HStack(spacing: 12) {
-            Image(systemName: "doc.text.magnifyingglass").font(.title2).foregroundStyle(.secondary)
+            Image(systemName: "doc.text.magnifyingglass")
+                .font(.title2)
+                .foregroundStyle(WorkspaceStyle.accent)
+                .frame(width: 40, height: 40)
+                .background(WorkspaceStyle.accent.opacity(0.10), in: RoundedRectangle(cornerRadius: 10))
             VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                    .font(.headline).lineLimit(2).textSelection(.enabled)
+                WorkspacePathLabel(path: title)
+                    .textSelection(.enabled)
                 Text(subtitle)
                     .font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
+            Button("复制路径") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(title, forType: .string)
+            }
             if !document.containsBinaryNotice {
                 Button("复制差异") {
                     NSPasteboard.general.clearContents()
@@ -157,6 +171,7 @@ struct DiffContentView: View {
             }
         }
         .padding(16)
+        .background(.bar)
     }
 
     /// 二进制文件展示能力说明；原始输出仍可展开，包含 SVN 返回的属性变更。
@@ -207,6 +222,7 @@ struct DiffContentView: View {
             .foregroundStyle(.secondary)
             .frame(width: 48, alignment: .trailing)
             .padding(.trailing, 10)
+            .background(Color.primary.opacity(0.035))
     }
 
     private func background(_ line: DiffLine) -> Color {

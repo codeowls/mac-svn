@@ -29,14 +29,12 @@ cp docs/INSTALL.txt "$STAGE_DIR/INSTALL.txt"
 ln -s /Applications "$STAGE_DIR/Applications"
 mkdir -p "$RELEASE_DIR"
 ASSET_NAME="Mac-SVN-$APP_VERSION-universal"
-ditto -c -k --sequesterRsrc --keepParent "$APP_DIR" "$RELEASE_DIR/$ASSET_NAME.zip"
 hdiutil create -volname "Mac SVN $APP_VERSION" -srcfolder "$STAGE_DIR" \
     -format UDZO "$RELEASE_DIR/$ASSET_NAME.dmg"
 hdiutil verify "$RELEASE_DIR/$ASSET_NAME.dmg"
-unzip -tq "$RELEASE_DIR/$ASSET_NAME.zip"
 (
     cd "$RELEASE_DIR"
-    shasum -a 256 "$ASSET_NAME.dmg" "$ASSET_NAME.zip" > SHA256SUMS.txt
+    shasum -a 256 "$ASSET_NAME.dmg" > SHA256SUMS.txt
     shasum -a 256 -c SHA256SUMS.txt
 )
 printf '\nRelease assets: %s\n' "$RELEASE_DIR"

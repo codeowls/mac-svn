@@ -31,7 +31,8 @@ struct CheckoutView: View {
             HStack(spacing: 12) {
                 Image(systemName: "arrow.down.to.line")
                     .font(.title2).frame(width: 44, height: 44)
-                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
+                    .foregroundStyle(WorkspaceStyle.accent)
+                    .background(WorkspaceStyle.accent.opacity(0.10), in: RoundedRectangle(cornerRadius: 12))
                 VStack(alignment: .leading, spacing: 4) {
                     Text("检出远端分支").font(.title2.bold())
                     Text("浏览仓库找到分支，或直接粘贴分支 URL。")
@@ -91,6 +92,8 @@ struct CheckoutView: View {
                     Text(reason).font(.caption).foregroundStyle(.secondary)
                 }
             }
+            .padding(14)
+            .modifier(WorkspacePanel())
             Text("直接检出到所选的空文件夹，递归包含全部子目录和文件，不包含 externals（外部引用）。\n未在 App 登录时，使用本机 SVN 已缓存的认证。")
                 .font(.caption).foregroundStyle(.secondary)
             Divider()
@@ -107,8 +110,9 @@ struct CheckoutView: View {
                 .disabled(checkoutUnavailableReason != nil)
             }
         }
-        .padding(28)
-        .frame(width: 660)
+        .padding(24)
+        .frame(width: 700)
+        .modifier(WorkspaceBackground())
         .background(ViewWindowReader { panelWindow = $0 })
         .sheet(isPresented: $showLogin) {
             RepositoryLoginView(model: model, repository: browser.checkoutURL) {
@@ -147,6 +151,7 @@ struct CheckoutView: View {
                 }
             }
             .padding(10)
+            .background(Color.primary.opacity(0.025))
             Divider()
             ScrollView {
                 if let error = browser.errorMessage {
@@ -174,7 +179,7 @@ struct CheckoutView: View {
                                 }
                                 .padding(10).contentShape(Rectangle())
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(SidebarActionStyle())
                             .disabled(!entry.isDirectory || browser.isLoading)
                             .accessibilityLabel(entry.isDirectory ? "进入 \(entry.name)" : entry.name)
                         }
@@ -184,8 +189,8 @@ struct CheckoutView: View {
             }
             .frame(height: 180)
         }
-        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(.separator.opacity(0.5)))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .modifier(WorkspacePanel())
     }
 
     private func withClient(_ action: (SVNClient) -> Void) {
