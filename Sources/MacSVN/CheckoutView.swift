@@ -7,6 +7,7 @@ struct CheckoutView: View {
     @StateObject private var browser = RepositoryBrowserModel()
     @Environment(\.dismiss) private var dismiss
     @ViewState private var destination: URL?
+    @ViewState private var depth: CheckoutDepth = .infinity
     @ViewState private var showLogin = false
     @ViewState private var panelWindow: NSWindow?
 
@@ -94,7 +95,17 @@ struct CheckoutView: View {
             }
             .padding(14)
             .modifier(WorkspacePanel())
-            Text("直接检出到所选的空文件夹，递归包含全部子目录和文件，不包含 externals（外部引用）。\n未在 App 登录时，使用本机 SVN 已缓存的认证。")
+            VStack(alignment: .leading, spacing: 8) {
+                Picker("检出深度", selection: $depth) {
+                    ForEach(CheckoutDepth.allCases, id: \.self) { option in
+                        Text(option.label).tag(option)
+                    }
+                }
+                .pickerStyle(.menu)
+                Text(depth.explanation)
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Text("直接检出到所选的空文件夹，不包含 externals（外部引用）。\n未在 App 登录时，使用本机 SVN 已缓存的认证。")
                 .font(.caption).foregroundStyle(.secondary)
             Divider()
             HStack {
@@ -103,7 +114,7 @@ struct CheckoutView: View {
                 Button("取消", role: .cancel) { dismiss() }
                 Button("开始检出") {
                     guard let destination else { return }
-                    model.checkout(repository: browser.checkoutURL, destination: destination)
+                    model.checkout(repository: browser.checkoutURL, destination: destination, depth: depth)
                     dismiss()
                 }
                 .buttonStyle(.borderedProminent)

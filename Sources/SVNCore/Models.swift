@@ -20,6 +20,32 @@ public struct RepositoryLocation: Sendable, Equatable {
     public let revision: String
 }
 
+/// SVN 检出范围，原始值直接对应 --depth 参数。
+public enum CheckoutDepth: String, CaseIterable, Sendable {
+    case infinity
+    case immediates
+    case files
+    case empty
+
+    public var label: String {
+        switch self {
+        case .infinity: return "全递归"
+        case .immediates: return "直接子节点，包含文件夹"
+        case .files: return "仅文件"
+        case .empty: return "仅此项"
+        }
+    }
+
+    public var explanation: String {
+        switch self {
+        case .infinity: return "检出全部文件及所有层级的子目录。"
+        case .immediates: return "检出当前层文件和直接子目录，不下载子目录中的内容。"
+        case .files: return "仅检出当前层文件，不下载子目录。"
+        case .empty: return "仅建立当前目录的工作副本，不下载目录中的文件和子目录。"
+        }
+    }
+}
+
 public struct CheckoutInspection: Sendable {
     public let directory: URL
     public let workingCopy: WorkingCopy?

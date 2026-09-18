@@ -215,10 +215,11 @@ public struct SVNClient: Sendable {
         return output.stdout + output.stderr
     }
 
-    /// 递归检出当前仓库目录的全部内容，外部引用仍由用户单独管理。
+    /// 按指定深度检出当前仓库目录，默认全递归，外部引用仍由用户单独管理。
     public func checkout(
         repository: String,
         destination: URL,
+        depth: CheckoutDepth = .infinity,
         onOutput: (@Sendable (String) -> Void)? = nil
     ) async throws -> String {
         let target = try Self.repositoryTarget(repository)
@@ -235,7 +236,7 @@ public struct SVNClient: Sendable {
             }
         }
         let output = try await command([
-            "checkout", "--depth", "infinity", "--ignore-externals", "--", target, destination.path
+            "checkout", "--depth", depth.rawValue, "--ignore-externals", "--", target, destination.path
         ], onOutput: onOutput)
         return output.stdout + output.stderr
     }

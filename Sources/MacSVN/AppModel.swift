@@ -595,7 +595,7 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func checkout(repository: String, destination: URL) {
+    func checkout(repository: String, destination: URL, depth: CheckoutDepth = .infinity) {
         perform(
             "检出仓库", streamOutput: true,
             cancellationMessage: "检出已中断，已下载内容保留在：\(destination.path)。请检查目标目录后决定如何继续。"
@@ -613,7 +613,7 @@ final class AppModel: ObservableObject {
             }
             let output: String
             do {
-                output = try await client.checkout(repository: repository, destination: destination) { text in
+                output = try await client.checkout(repository: repository, destination: destination, depth: depth) { text in
                     stream.append(text)
                 }
                 stream.finish()
