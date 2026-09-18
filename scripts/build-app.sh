@@ -2,6 +2,11 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
+SWIFT_BUILD_JOBS="${SWIFT_BUILD_JOBS-2}"
+if [[ ! "$SWIFT_BUILD_JOBS" =~ ^[1-9][0-9]*$ ]]; then
+    printf 'SWIFT_BUILD_JOBS must be a positive integer: %s\n' "$SWIFT_BUILD_JOBS" >&2
+    exit 1
+fi
 APP_VERSION="$(cat VERSION)"
 if [[ ! "$APP_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
     printf 'Invalid VERSION: %s\n' "$APP_VERSION" >&2
@@ -9,7 +14,10 @@ if [[ ! "$APP_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
 fi
 MACOS_SDK_PATH="$(xcrun --sdk macosx --show-sdk-path)"
 MACOS_SDK_VERSION="$(xcrun --sdk macosx --show-sdk-version)"
-BUILD_ARGS=(-c release --sdk "$MACOS_SDK_PATH")
+# Limit both SwiftPM scheduling and the release compiler's internal threads.
+# This keeps local builds responsive; callers can explicitly raise the limit.
+BUILD_ARGS=(-c release --sdk "$MACOS_SDK_PATH" --jobs "$SWIFT_BUILD_JOBS"
+    -Xswiftc -num-threads -Xswiftc "$SWIFT_BUILD_JOBS")
 case "${1:-}" in
     "") ARCHITECTURES=("$(uname -m)") ;;
     --universal) ARCHITECTURES=(arm64 x86_64) ;;
@@ -20,6 +28,7 @@ esac
 # Build each slice separately: Xcode 16's multi-architecture SwiftPM backend
 # forwards linker flags to clang differently from its single-architecture backend.
 BINARIES=()
+printf 'Building with up to %s parallel jobs and compiler threads.\n' "$SWIFT_BUILD_JOBS"
 for architecture in "${ARCHITECTURES[@]}"; do
     swift build "${BUILD_ARGS[@]}" --arch "$architecture" \
         -Xlinker -platform_version -Xlinker macos \

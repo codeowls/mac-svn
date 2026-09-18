@@ -66,6 +66,8 @@ open "dist/Mac SVN.app"
 
 默认生成本机架构 App；使用 `bash scripts/build-app.sh --universal` 可生成通用架构。版本号统一读取 `VERSION`，采用 ad-hoc 签名，尚未进行 Developer ID 签名和 Apple 公证。构建产物不会提交到 Git。
 
+构建脚本默认将 SwiftPM 并行任务数和编译器线程数均设为 2，以降低本机负载；这不是严格的 CPU 占用上限。可用 `SWIFT_BUILD_JOBS=1 bash scripts/build-app.sh` 进一步降低并发，或按需增加该正整数。通用包的两个架构依次构建，`package-release.sh` 也沿用此设置。正式安装包可由下述 GitHub Actions 发布流程构建，无需在本机重复打包。
+
 运行 `bash scripts/package-release.sh` 生成通用架构 DMG、ZIP 和 SHA256 校验文件，输出到 `dist/releases/1.1.0/`；已有同版本输出时拒绝覆盖。维护者更新 `VERSION` 及 `release-notes/<版本>.txt` 后推送对应 `v<版本>` 标签，发布工作流会校验标签、构建验证安装包、上传附件后公开 Release。
 
 打包时自动生成并嵌入原生 App 图标；源图和图标说明位于 [`assets/`](assets/README.md)。通过打包后的 `.app` 启动可使用该图标。打包脚本会刷新该 App 的 Launch Services 注册，启动时重新载入 Dock 图标；重建后请退出旧进程再打开 `dist/Mac SVN.app`。`swift run` 是裸可执行文件调试入口，不包含 `.app` 的图标和语言声明。
@@ -207,6 +209,8 @@ open "dist/Mac SVN.app"
 ```
 
 The script builds for the local architecture, embeds the app icon and language declarations, and applies an ad-hoc signature. It refreshes this app's Launch Services registration. Quit the previous app process before reopening the rebuilt bundle. Build artifacts are excluded from Git.
+
+Build scripts default to 2 SwiftPM jobs and 2 compiler threads to reduce local load; this is not a strict CPU usage cap. Use `SWIFT_BUILD_JOBS=1 bash scripts/build-app.sh` to reduce concurrency further, or choose another positive integer. Universal builds process architectures sequentially, and `package-release.sh` inherits the same setting. The GitHub Actions release workflow can build distribution packages without repeating that work locally.
 
 Use `bash scripts/build-app.sh --universal` for both architectures, or `bash scripts/package-release.sh` to produce DMG, ZIP, and checksums in `dist/releases/1.1.0/`. Existing release output is not overwritten. The version comes from `VERSION`; packages use ad-hoc signing without Developer ID signing or Apple notarization. Running `swift run` starts a bare executable without the bundle's icon and language configuration.
 
