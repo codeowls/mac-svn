@@ -30,22 +30,22 @@ struct HistoricalDiffView: View {
             }
             if failure != nil {
                 HStack {
-                    Label("历史差异读取失败", systemImage: "exclamationmark.triangle")
+                    Label(L10n.text("历史差异读取失败"), systemImage: "exclamationmark.triangle")
                         .foregroundStyle(.red)
                     Spacer()
-                    Button("重试") { attempt += 1 }
+                    Button(L10n.text("重试")) { attempt += 1 }
                 }
                 .padding(12)
             } else if comparison == nil {
-                ProgressView("正在从仓库读取历史差异…").padding(12)
+                ProgressView(L10n.text("正在从仓库读取历史差异…")).padding(12)
             }
             DiffContentView(
                 title: request.change.path,
                 subtitle: "r\(request.revision) · \(request.change.label)"
-                    + (request.change.kind == "dir" ? " · 仅当前目录属性，不包含子项" : "")
-                    + (request.change.copyFromPath.map { " · 复制自 \($0) @ r\(request.change.copyFromRevision ?? "")" } ?? ""),
-                text: failure ?? comparison?.text ?? "正在读取…",
-                oldLabel: comparison?.oldLabel ?? "读取比较版本中…",
+                    + (request.change.kind == "dir" ? L10n.text(" · 仅当前目录属性，不包含子项") : "")
+                    + (request.change.copyFromPath.map { L10n.text(" · 复制自 %@ @ r%@", $0, request.change.copyFromRevision ?? "") } ?? ""),
+                text: failure ?? comparison?.text ?? L10n.text("正在读取…"),
+                oldLabel: comparison?.oldLabel ?? L10n.text("读取比较版本中…"),
                 newLabel: comparison?.newLabel ?? "r\(request.revision)",
                 footer: comparisonSummary
             )
@@ -77,31 +77,31 @@ struct HistoricalDiffView: View {
     /// 从实际比较版本生成摘要，保留新增、删除及复制来源含义，不重复长路径。
     private var comparisonSummary: String {
         guard comparison != nil, let versions else {
-            return "历史查看不会修改工作副本"
+            return L10n.text("历史查看不会修改工作副本")
         }
         let before = versions.before.map {
-            "r\($0.revision)" + ($0.isCopySource ? "（复制来源）" : "")
-        } ?? "前版本不存在"
+            "r\($0.revision)" + ($0.isCopySource ? L10n.text("（复制来源）") : "")
+        } ?? L10n.text("前版本不存在")
         let after = versions.after.map { "r\($0.revision)" }
-            ?? "r\(request.revision)（已删除）"
-        return "\(before) → \(after) · 只读"
+            ?? L10n.text("r%@（已删除）", request.revision)
+        return L10n.text("%@ → %@ · 只读", before, after)
     }
 
     private func exportBar(_ versions: HistoricalFileVersions) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Label("导出历史文件", systemImage: "square.and.arrow.down")
+                Label(L10n.text("导出历史文件"), systemImage: "square.and.arrow.down")
                 Spacer()
                 if let before = versions.before {
-                    Button(before.isCopySource ? "导出复制来源…" : "导出前版本…") { export(before) }
+                    Button(before.isCopySource ? L10n.text("导出复制来源…") : L10n.text("导出前版本…")) { export(before) }
                         .help(before.label)
                 } else {
-                    Text("前版本不存在").foregroundStyle(.secondary)
+                    Text(L10n.text("前版本不存在")).foregroundStyle(.secondary)
                 }
                 if let after = versions.after {
-                    Button("导出后版本…") { export(after) }.help(after.label)
+                    Button(L10n.text("导出后版本…")) { export(after) }.help(after.label)
                 } else {
-                    Text("后版本已删除").foregroundStyle(.secondary)
+                    Text(L10n.text("后版本已删除")).foregroundStyle(.secondary)
                 }
             }
             .disabled(exportTask != nil)
@@ -113,9 +113,9 @@ struct HistoricalDiffView: View {
                         .textSelection(.enabled)
                     Spacer()
                     if exportTask != nil {
-                        Button("取消导出") { exportTask?.cancel() }
+                        Button(L10n.text("取消导出")) { exportTask?.cancel() }
                     } else if let exportedURL {
-                        Button("在访达中显示") { NSWorkspace.shared.activateFileViewerSelecting([exportedURL]) }
+                        Button(L10n.text("在访达中显示")) { NSWorkspace.shared.activateFileViewerSelecting([exportedURL]) }
                     }
                 }
             }
@@ -129,12 +129,12 @@ struct HistoricalDiffView: View {
     private func export(_ version: HistoricalFileVersion) {
         guard let window = exportWindow else {
             exportFailed = true
-            exportMessage = "未能定位历史窗口，请关闭后重新打开。"
+            exportMessage = L10n.text("未能定位历史窗口，请关闭后重新打开。")
             return
         }
         let panel = NSSavePanel()
-        panel.title = "导出历史文件"
-        panel.message = version.label + "\n保存仓库原始文件内容，不包含 SVN 属性。"
+        panel.title = L10n.text("导出历史文件")
+        panel.message = version.label + L10n.text("\n保存仓库原始文件内容，不包含 SVN 属性。")
         panel.nameFieldStringValue = version.suggestedFilename
         panel.directoryURL = request.directory.deletingLastPathComponent()
         panel.canCreateDirectories = true
@@ -151,12 +151,12 @@ struct HistoricalDiffView: View {
         guard target != root, !target.hasPrefix(root + "/") else {
             exportFailed = true
             exportedURL = nil
-            exportMessage = "请选择当前工作副本以外的位置，避免覆盖本地工作文件。"
+            exportMessage = L10n.text("请选择当前工作副本以外的位置，避免覆盖本地工作文件。")
             return
         }
         exportFailed = false
         exportedURL = nil
-        exportMessage = "正在导出 \(version.label)…"
+        exportMessage = L10n.text("正在导出 %@…", version.label)
         exportTask = Task { @MainActor in
             defer { exportTask = nil }
             do {
@@ -164,9 +164,9 @@ struct HistoricalDiffView: View {
                 try Task.checkCancellation()
                 try data.write(to: destination, options: .atomic)
                 exportedURL = destination
-                exportMessage = "已导出：\(destination.path)"
+                exportMessage = L10n.text("已导出：%@", destination.path)
             } catch is CancellationError {
-                exportMessage = "导出已取消，目标文件未写入。"
+                exportMessage = L10n.text("导出已取消，目标文件未写入。")
             } catch {
                 exportFailed = true
                 exportMessage = error.localizedDescription

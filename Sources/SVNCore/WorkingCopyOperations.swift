@@ -4,7 +4,7 @@ import CryptoKit
 public enum FileOperation: String, Sendable {
     case rename, delete
 
-    public var title: String { self == .rename ? "重命名" : "删除" }
+    public var title: String { self == .rename ? L10n.text("重命名") : L10n.text("删除") }
 }
 
 public struct FileOperationPlan: Identifiable, Sendable {
@@ -37,18 +37,18 @@ public struct CommitPlan: Identifiable, Sendable {
 extension SVNClient {
     /// 展开 SVN 必须一起提交的移动两端、父目录和结构性目录；所有隐含子项先展示再确认。
     public func prepareCommit(paths: [String], message: String, at directory: URL) async throws -> CommitPlan {
-        guard !paths.isEmpty else { throw SVNError("请先勾选要提交的项目。") }
+        guard !paths.isEmpty else { throw SVNError(L10n.text("请先勾选要提交的项目。")) }
         guard !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            throw SVNError("请填写提交说明。")
+            throw SVNError(L10n.text("请填写提交说明。"))
         }
         let current = try await status(at: directory)
         var reasons: [String: String] = [:]
         for path in Set(paths) {
             _ = try localTarget(path)
             guard current.contains(where: { $0.path == path && $0.canCommit }) else {
-                throw SVNError("\(path) 的状态已变化或不可提交，请刷新后检查。")
+                throw SVNError(L10n.text("%@ 的状态已变化或不可提交，请刷新后检查。", path))
             }
-            reasons[path] = "已勾选"
+            reasons[path] = L10n.text("已勾选")
         }
         var reviewed: [String: CommitReviewItem] = [:]
         var replacedBaseItems: [String: CommitReviewItem] = [:]
@@ -57,7 +57,7 @@ extension SVNClient {
             let target = try localTarget(path)
             let infoOutput = try await command(["info", "--xml", "--depth", "empty", "--", target], in: directory)
             let info = try XMLReader.parse(infoOutput.stdout)
-            guard let node = info.child("entry") else { throw SVNError("缺少提交项目元数据：\(path)") }
+            guard let node = info.child("entry") else { throw SVNError(L10n.text("缺少提交项目元数据：%@", path)) }
             try requireOperationRoot(node, directory: directory)
             let statusOutput = try await command(
                 ["status", "--xml", "--depth", "empty", "--verbose", "--ignore-externals", "--", target], in: directory
@@ -66,19 +66,19 @@ extension SVNClient {
             guard let state = try SVNXML.status(statusOutput.stdout).first, !state.isConflict,
                   state.canCommit || state.item == "normal",
                   !stateTree.descendants("wc-status").contains(where: { $0.attributes["file-external"] == "true" }) else {
-                throw SVNError("提交范围中存在不可提交项目：\(path)")
+                throw SVNError(L10n.text("提交范围中存在不可提交项目：%@", path))
             }
             for key in ["moved-from", "moved-to"] {
                 if let other = node.child("wc-info")?.child(key)?.text, !other.isEmpty {
                     _ = try operationPath(other, at: directory)
-                    if reasons[other] == nil { reasons[other] = "重命名／移动的另一端：\(path)" }
+                    if reasons[other] == nil { reasons[other] = L10n.text("重命名／移动的另一端：%@", path) }
                 }
             }
             var parent = (path as NSString).deletingLastPathComponent
             while !parent.isEmpty && parent != "." {
                 if current.contains(where: { $0.path == parent && ["added", "replaced"].contains($0.item) }),
                    reasons[parent] == nil {
-                    reasons[parent] = "尚未提交的父目录：\(path)"
+                    reasons[parent] = L10n.text("尚未提交的父目录：%@", path)
                 }
                 parent = (parent as NSString).deletingLastPathComponent
             }
@@ -88,7 +88,7 @@ extension SVNClient {
                 for child in try XMLReader.parse(descendants.stdout).children where child.name == "entry" {
                     try requireOperationRoot(child, directory: directory)
                     if let childPath = child.attributes["path"], reasons[childPath] == nil {
-                        reasons[childPath] = "目录结构操作包含的子项：\(path)"
+                        reasons[childPath] = L10n.text("目录结构操作包含的子项：%@", path)
                     }
                 }
             }
@@ -96,17 +96,17 @@ extension SVNClient {
                 // 新目录的 info 不含被替换掉的旧子项；从 BASE 列出它们，避免确认清单漏报删除。
                 guard let revision = stateTree.descendants("wc-status").first?.attributes["revision"],
                       let number = Int(revision), number >= 0, let url = node.child("url")?.text else {
-                    throw SVNError("无法确认被替换目录的原版本：\(path)")
+                    throw SVNError(L10n.text("无法确认被替换目录的原版本：%@", path))
                 }
                 let oldTree = try await command(
                     ["list", "--xml", "--recursive", "-r", revision, "--", url + "@" + revision], in: directory
                 )
                 let oldNodes = try XMLReader.parse(oldTree.stdout)
                 for child in oldNodes.descendants("entry") {
-                    guard let name = child.child("name")?.text else { throw SVNError("BASE 目录缺少子项名称。") }
+                    guard let name = child.child("name")?.text else { throw SVNError(L10n.text("BASE 目录缺少子项名称。")) }
                     let oldPath = path + "/" + name
                     replacedBaseItems[oldPath] = CommitReviewItem(
-                        path: oldPath, reason: "目录替换将移除或替换的原 BASE 子项：\(path)",
+                        path: oldPath, reason: L10n.text("目录替换将移除或替换的原 BASE 子项：%@", path),
                         snapshot: try conflictMetadataDigest(child)
                     )
                 }
@@ -124,7 +124,7 @@ extension SVNClient {
         for (path, oldItem) in replacedBaseItems {
             if let newItem = reviewed[path] {
                 reviewed[path] = CommitReviewItem(
-                    path: path, reason: newItem.reason + "；替换原 BASE 子项",
+                    path: path, reason: newItem.reason + L10n.text("；替换原 BASE 子项"),
                     snapshot: newItem.snapshot + oldItem.snapshot
                 )
             } else {
@@ -141,7 +141,7 @@ extension SVNClient {
     public func commit(_ plan: CommitPlan, onOutput: (@Sendable (String) -> Void)? = nil) async throws -> String {
         let fresh = try await prepareCommit(paths: plan.requestedPaths, message: plan.message, at: plan.root)
         guard fresh.items == plan.items, fresh.targets == plan.targets else {
-            throw SVNError("确认期间提交内容或范围发生变化，尚未提交。请重新检查。")
+            throw SVNError(L10n.text("确认期间提交内容或范围发生变化，尚未提交。请重新检查。"))
         }
         try Task.checkCancellation()
         do {
@@ -153,7 +153,7 @@ extension SVNClient {
         } catch is CancellationError {
             throw CancellationError()
         } catch {
-            throw SVNError("提交未确认完成，请先查看仓库历史核实结果，勿直接重复提交。\n\n\(error.localizedDescription)")
+            throw SVNError(L10n.text("提交未确认完成，请先查看仓库历史核实结果，勿直接重复提交。\n\n%@", error.localizedDescription))
         }
     }
 
@@ -166,7 +166,7 @@ extension SVNClient {
         let infoOutput = try await command(["info", "--xml", "--depth", "infinity", "--", target], in: directory)
         let info = try XMLReader.parse(infoOutput.stdout)
         guard let first = info.child("entry"), first.child("wc-info")?.child("schedule")?.text != "delete" else {
-            throw SVNError("此项目已经计划删除，请刷新后检查。")
+            throw SVNError(L10n.text("此项目已经计划删除，请刷新后检查。"))
         }
         for entry in info.children where entry.name == "entry" {
             try requireOperationRoot(entry, directory: directory)
@@ -177,31 +177,31 @@ extension SVNClient {
         let statuses = try SVNXML.status(statusOutput.stdout)
         guard !statuses.contains(where: {
             $0.isConflict || ["external", "obstructed", "incomplete"].contains($0.item)
-        }) else { throw SVNError("范围中存在冲突、外部副本或不完整项目，请先单独处理。") }
+        }) else { throw SVNError(L10n.text("范围中存在冲突、外部副本或不完整项目，请先单独处理。")) }
         let statusTree = try XMLReader.parse(statusOutput.stdout)
         guard !statusTree.descendants("wc-status").contains(where: {
             $0.attributes["file-external"] == "true" || $0.attributes["switched"] == "true"
-        }) else { throw SVNError("范围中存在外部文件或已切换的目录，请单独处理。") }
+        }) else { throw SVNError(L10n.text("范围中存在外部文件或已切换的目录，请单独处理。")) }
         var destination: String?
         if operation == .rename {
             guard !newName.isEmpty, ![".", "..", ".svn"].contains(newName.lowercased()),
                   !newName.contains("/"), !newName.contains("\0") else {
-                throw SVNError("请输入单个文件或目录名称，不能包含斜杠、空字符或 .svn。")
+                throw SVNError(L10n.text("请输入单个文件或目录名称，不能包含斜杠、空字符或 .svn。"))
             }
             let parent = (source as NSString).deletingLastPathComponent
             let result = parent.isEmpty ? newName : parent + "/" + newName
-            guard result != source else { throw SVNError("新名称与原名称相同。") }
+            guard result != source else { throw SVNError(L10n.text("新名称与原名称相同。")) }
             let url = directory.appendingPathComponent(result)
             // 包括断开的符号链接；绝不把已存在的目录当作移动目的文件夹。
             do {
                 _ = try FileManager.default.attributesOfItem(atPath: url.path)
-                throw SVNError("目标路径已存在，请选择其他名称：\(result)")
+                throw SVNError(L10n.text("目标路径已存在，请选择其他名称：%@", result))
             } catch let error as NSError where error.domain == NSCocoaErrorDomain && [NSFileReadNoSuchFileError, NSFileNoSuchFileError].contains(error.code) {
                 // 目标尚不存在，符合重命名要求；其他读取错误保持原样上报。
             }
             let current = try await status(at: directory, includeIgnored: true)
             guard !current.contains(where: { $0.path == result }) else {
-                throw SVNError("目标路径已有 SVN 操作记录，请先处理：\(result)")
+                throw SVNError(L10n.text("目标路径已有 SVN 操作记录，请先处理：%@", result))
             }
             destination = result
         }
@@ -229,7 +229,7 @@ extension SVNClient {
             newName: plan.destination.map { ($0 as NSString).lastPathComponent } ?? "", at: plan.root
         )
         guard fresh.snapshot == plan.snapshot, fresh.affectedPaths == plan.affectedPaths else {
-            throw SVNError("确认期间文件、属性或状态已变化，尚未执行。请重新检查操作范围。")
+            throw SVNError(L10n.text("确认期间文件、属性或状态已变化，尚未执行。请重新检查操作范围。"))
         }
         try Task.checkCancellation()
         let arguments: [String]
@@ -241,7 +241,7 @@ extension SVNClient {
         }
         let output = try await command(arguments, in: plan.root)
         _ = try await status(at: plan.root)
-        return "\(plan.operation.title)已完成，尚未提交到仓库。\n" + output.stdout + output.stderr
+        return L10n.text("%@已完成，尚未提交到仓库。\n", plan.operation.title) + output.stdout + output.stderr
     }
 
     /// 只处理工作副本内的明确相对路径；不通过父目录符号链接进入其他位置。
@@ -249,12 +249,12 @@ extension SVNClient {
         _ = try localTarget(path)
         let parts = path.split(separator: "/", omittingEmptySubsequences: false)
         guard !parts.contains(where: { $0.isEmpty || $0 == "." || $0.lowercased() == ".svn" }) else {
-            throw SVNError("不能操作工作副本根目录、元数据或非规范路径。")
+            throw SVNError(L10n.text("不能操作工作副本根目录、元数据或非规范路径。"))
         }
         let parent = directory.appendingPathComponent(path).deletingLastPathComponent().resolvingSymlinksInPath().path
         let root = directory.resolvingSymlinksInPath().path
         guard parent == root || parent.hasPrefix(root + "/") else {
-            throw SVNError("路径不属于当前工作副本。")
+            throw SVNError(L10n.text("路径不属于当前工作副本。"))
         }
         return path
     }
@@ -262,7 +262,7 @@ extension SVNClient {
     func requireOperationRoot(_ node: XMLNode, directory: URL) throws {
         guard let root = node.child("wc-info")?.child("wcroot-abspath")?.text,
               URL(fileURLWithPath: root).resolvingSymlinksInPath().path == directory.resolvingSymlinksInPath().path else {
-            throw SVNError("不能操作嵌套工作副本，请单独打开该副本。")
+            throw SVNError(L10n.text("不能操作嵌套工作副本，请单独打开该副本。"))
         }
     }
 
@@ -279,14 +279,14 @@ extension SVNClient {
         if type == .typeDirectory {
             let children = try FileManager.default.contentsOfDirectory(atPath: url.path).sorted()
             guard !children.contains(where: { $0.lowercased() == ".svn" }) else {
-                throw SVNError("操作范围包含嵌套工作副本：\(path)")
+                throw SVNError(L10n.text("操作范围包含嵌套工作副本：%@", path))
             }
             return try [(path, "directory")] + children.flatMap {
                 try physicalSnapshot(path: path + "/" + $0, at: directory)
             }
         }
         guard type == .typeRegular || type == .typeSymbolicLink else {
-            throw SVNError("不支持操作此特殊文件：\(path)")
+            throw SVNError(L10n.text("不支持操作此特殊文件：%@", path))
         }
         return [(path, (type == .typeSymbolicLink ? "link:" : "file:")
             + (try contentDigest(at: url, isDirectory: false) ?? "missing"))]

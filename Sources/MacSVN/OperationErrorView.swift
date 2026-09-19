@@ -1,3 +1,4 @@
+import SVNCore
 import AppKit
 import SwiftUI
 
@@ -13,9 +14,9 @@ struct OperationErrorView: View {
                     .font(.system(size: 28))
                     .foregroundStyle(.yellow)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("操作未完成")
+                    Text(L10n.text("操作未完成"))
                         .font(.headline)
-                    Text("请查看下方错误详情。")
+                    Text(L10n.text("请查看下方错误详情。"))
                         .foregroundStyle(.secondary)
                 }
             }
@@ -23,7 +24,7 @@ struct OperationErrorView: View {
             OperationOutputView(
                 text: message,
                 followsOutput: false,
-                accessibilityLabel: "完整错误详情"
+                accessibilityLabel: L10n.text("完整错误详情")
             )
             .padding(10)
             .background(.background, in: RoundedRectangle(cornerRadius: 8))
@@ -34,12 +35,12 @@ struct OperationErrorView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             HStack {
-                Button("复制完整详情") {
+                Button(L10n.text("复制完整详情")) {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(message, forType: .string)
                 }
                 Spacer()
-                Button("关闭", action: onClose)
+                Button(L10n.text("关闭"), action: onClose)
                     .keyboardShortcut(.defaultAction)
             }
         }

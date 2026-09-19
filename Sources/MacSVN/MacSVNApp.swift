@@ -1,3 +1,4 @@
+import SVNCore
 import AppKit
 import SwiftUI
 
@@ -23,6 +24,10 @@ struct MacSVNApp: App {
     @StateObject private var model = AppModel()
     @AppStorage("workspaceAppearance") private var appearance = "system"
 
+    init() {
+        L10n.language.save()
+    }
+
     private var preferredColorScheme: ColorScheme? {
         switch appearance {
         case "light": .light
@@ -34,35 +39,37 @@ struct MacSVNApp: App {
     var body: some Scene {
         Window("Mac SVN", id: "main") {
             ContentView(model: model)
+                .environment(\.locale, L10n.language.locale)
                 .frame(minWidth: 1000, minHeight: 680)
                 .preferredColorScheme(preferredColorScheme)
         }
         .defaultSize(width: 1250, height: 800)
         .commands {
             CommandGroup(replacing: .newItem) {
-                Button("打开工作副本…") { model.chooseWorkingCopy() }
+                Button(L10n.text("打开工作副本…")) { model.chooseWorkingCopy() }
                     .keyboardShortcut("o")
                     .disabled(model.isBusy)
             }
             CommandGroup(after: .sidebar) {
-                Picker("外观", selection: $appearance) {
-                    Text("跟随系统").tag("system")
-                    Text("浅色").tag("light")
-                    Text("深色").tag("dark")
+                Picker(L10n.text("外观"), selection: $appearance) {
+                    Text(L10n.text("跟随系统")).tag("system")
+                    Text(L10n.text("浅色")).tag("light")
+                    Text(L10n.text("深色")).tag("dark")
                 }
             }
             CommandMenu("SVN") {
-                Button("刷新本地状态") { model.refresh() }
+                Button(L10n.text("刷新本地状态")) { model.refresh() }
                     .keyboardShortcut("r")
                     .disabled(model.isBusy || model.workingCopy == nil)
-                Button("更新工作副本") { model.update() }
+                Button(L10n.text("更新工作副本")) { model.update() }
                     .disabled(model.isBusy || model.workingCopy == nil)
-                Button("历史记录") { model.showSavedHistory() }
+                Button(L10n.text("历史记录")) { model.showSavedHistory() }
                     .disabled(model.isBusy || model.workingCopy == nil)
             }
         }
         Settings {
             SettingsView(model: model)
+                .environment(\.locale, L10n.language.locale)
                 .preferredColorScheme(preferredColorScheme)
         }
     }

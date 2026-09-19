@@ -51,7 +51,7 @@ public enum ExternalMergeTool: String, CaseIterable, Identifiable, Sendable {
     public func executableURL(for path: String) throws -> URL {
         let expanded = (path.trimmingCharacters(in: .whitespacesAndNewlines) as NSString).expandingTildeInPath
         guard expanded.hasPrefix("/"), !expanded.contains("\0") else {
-            throw SVNError("请选择 \(title) 应用或填写完整的命令行工具路径。")
+            throw SVNError(L10n.text("请选择 %@ 应用或填写完整的命令行工具路径。", title))
         }
         var url = URL(fileURLWithPath: expanded).standardizedFileURL
         if url.pathExtension.lowercased() == "app" {
@@ -60,7 +60,7 @@ public enum ExternalMergeTool: String, CaseIterable, Identifiable, Sendable {
         var directory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: url.path, isDirectory: &directory),
               !directory.boolValue, FileManager.default.isExecutableFile(atPath: url.path) else {
-            throw SVNError("未找到 \(title) 的可执行工具，请检查安装位置。")
+            throw SVNError(L10n.text("未找到 %@ 的可执行工具，请检查安装位置。", title))
         }
         return url
     }
@@ -100,11 +100,11 @@ extension SVNClient {
         let current = try await conflictDetails(path: details.entry.path, at: details.root)
         guard current.canMarkResolved, current.entry == details.entry,
               current.metadataDigest == details.metadataDigest else {
-            throw SVNError("冲突状态已变化，或包含属性／树冲突，请重新读取详情。")
+            throw SVNError(L10n.text("冲突状态已变化，或包含属性／树冲突，请重新读取详情。"))
         }
         func file(_ id: String) throws -> URL {
             guard let file = current.files.first(where: { $0.id == id }) else {
-                throw SVNError("该冲突缺少三方合并所需的版本文件，请重新读取详情。")
+                throw SVNError(L10n.text("该冲突缺少三方合并所需的版本文件，请重新读取详情。"))
             }
             _ = try conflictFileContent(file, at: details.root)
             return file.url

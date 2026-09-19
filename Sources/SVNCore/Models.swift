@@ -29,19 +29,19 @@ public enum CheckoutDepth: String, CaseIterable, Sendable {
 
     public var label: String {
         switch self {
-        case .infinity: return "全递归"
-        case .immediates: return "直接子节点，包含文件夹"
-        case .files: return "仅文件"
-        case .empty: return "仅此项"
+        case .infinity: return L10n.text("全递归")
+        case .immediates: return L10n.text("直接子节点，包含文件夹")
+        case .files: return L10n.text("仅文件")
+        case .empty: return L10n.text("仅此项")
         }
     }
 
     public var explanation: String {
         switch self {
-        case .infinity: return "检出全部文件及所有层级的子目录。"
-        case .immediates: return "检出当前层文件和直接子目录，不下载子目录中的内容。"
-        case .files: return "仅检出当前层文件，不下载子目录。"
-        case .empty: return "仅建立当前目录的工作副本，不下载目录中的文件和子目录。"
+        case .infinity: return L10n.text("检出全部文件及所有层级的子目录。")
+        case .immediates: return L10n.text("检出当前层文件和直接子目录，不下载子目录中的内容。")
+        case .files: return L10n.text("仅检出当前层文件，不下载子目录。")
+        case .empty: return L10n.text("仅建立当前目录的工作副本，不下载目录中的文件和子目录。")
         }
     }
 }
@@ -82,16 +82,16 @@ public struct StatusEntry: Identifiable, Sendable, Equatable {
     }
 
     public var label: String {
-        if treeConflict { return "树冲突" }
-        if isConflict { return "冲突" }
+        if treeConflict { return L10n.text("树冲突") }
+        if isConflict { return L10n.text("冲突") }
         let labels = [
-            "added": "新增", "modified": "修改", "deleted": "计划删除",
-            "replaced": "替换", "unversioned": "未纳入版本控制", "missing": "文件缺失",
-            "obstructed": "路径阻塞", "external": "外部工作副本",
-            "incomplete": "不完整", "normal": "内容未改", "ignored": "已忽略"
+            "added": L10n.text("新增"), "modified": L10n.text("修改"), "deleted": L10n.text("计划删除"),
+            "replaced": L10n.text("替换"), "unversioned": L10n.text("未纳入版本控制"), "missing": L10n.text("文件缺失"),
+            "obstructed": L10n.text("路径阻塞"), "external": L10n.text("外部工作副本"),
+            "incomplete": L10n.text("不完整"), "normal": L10n.text("内容未改"), "ignored": L10n.text("已忽略")
         ]
         let text = labels[item] ?? item
-        return properties == "modified" ? "\(text) · 属性修改" : text
+        return properties == "modified" ? L10n.text("%@ · 属性修改", text) : text
     }
 }
 
@@ -121,7 +121,7 @@ public struct HistoricalFileVersion: Sendable, Equatable {
     public let isCopySource: Bool
 
     public var label: String {
-        "\(path) · r\(revision)" + (isCopySource ? "（复制来源）" : "")
+        "\(path) · r\(revision)" + (isCopySource ? L10n.text("（复制来源）") : "")
     }
 
     public var suggestedFilename: String {
@@ -219,10 +219,10 @@ public struct LogChangedPath: Identifiable, Sendable, Equatable {
 
     public var label: String {
         switch action {
-        case "A": return copyFromPath == nil ? "新增" : "新增 · 复制"
-        case "D": return "删除"
-        case "R": return "替换"
-        case "M": return propertiesModified == true && textModified == false ? "属性修改" : "修改"
+        case "A": return copyFromPath == nil ? L10n.text("新增") : L10n.text("新增 · 复制")
+        case "D": return L10n.text("删除")
+        case "R": return L10n.text("替换")
+        case "M": return propertiesModified == true && textModified == false ? L10n.text("属性修改") : L10n.text("修改")
         default: return action
         }
     }

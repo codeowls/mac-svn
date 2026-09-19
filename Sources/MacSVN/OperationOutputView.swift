@@ -1,3 +1,4 @@
+import SVNCore
 import AppKit
 import SwiftUI
 
@@ -5,7 +6,7 @@ import SwiftUI
 struct OperationOutputView: NSViewRepresentable {
     let text: String
     let followsOutput: Bool
-    var accessibilityLabel = "完整操作输出"
+    var accessibilityLabel = L10n.text("完整操作输出")
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 

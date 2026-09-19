@@ -23,7 +23,7 @@ public struct SVNError: LocalizedError, Sendable {
 
     /// 展示可操作的认证提示；XML 半成品仅保留在诊断输出中，不混入用户错误正文。
     public init(output: CommandOutput, xmlOutput: Bool) {
-        diagnostic = "SVN 退出码 \(output.exitCode)\n\(output.stderr)\(output.stdout)"
+        diagnostic = L10n.text("SVN 退出码 %@\n%@%@", output.exitCode, output.stderr, output.stdout)
         requiresAuthentication = output.stderr.contains("E170001:") || output.stderr.contains("E215004:")
         // 只依据 SVN 的错误流识别已知的响应截断，不从文件名或普通输出猜测。
         isInterruptedTransfer = !requiresAuthentication && output.stderr
@@ -32,8 +32,8 @@ public struct SVNError: LocalizedError, Sendable {
         let detail = xmlOutput ? output.stderr : output.stderr + output.stdout
         let reason = detail.trimmingCharacters(in: .whitespacesAndNewlines)
         let summary = requiresAuthentication
-            ? "仓库需要有效账号，或当前账号没有访问权限。请登录仓库后重试；密码仅保留在当前 App 会话中。"
-            : "SVN 退出码 \(output.exitCode)"
+            ? L10n.text("仓库需要有效账号，或当前账号没有访问权限。请登录仓库后重试；密码仅保留在当前 App 会话中。")
+            : L10n.text("SVN 退出码 %@", output.exitCode)
         message = reason.isEmpty ? summary : "\(summary)\n\n\(reason)"
     }
 
@@ -76,7 +76,7 @@ private final class ProcessExecution: @unchecked Sendable {
         if let input {
             // 取消或启动参数错误时子进程可能提前关闭输入，避免 SIGPIPE 终止 App。
             guard fcntl(input.fileHandleForWriting.fileDescriptor, F_SETNOSIGPIPE, 1) != -1 else {
-                throw SVNError("无法配置子进程输入管道。")
+                throw SVNError(L10n.text("无法配置子进程输入管道。"))
             }
         }
         process.standardOutput = stdout
@@ -131,7 +131,7 @@ private final class ProcessExecution: @unchecked Sendable {
         }
         // 子进程失败时保留它的原始错误；成功退出却未传入完整输入则明确报错。
         if process.terminationStatus == 0, let error = inputError.get() {
-            throw SVNError("向子进程传递输入失败：\(error.localizedDescription)")
+            throw SVNError(L10n.text("向子进程传递输入失败：%@", error.localizedDescription))
         }
         return CommandOutput(
             stdoutData: outputData,

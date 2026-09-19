@@ -60,29 +60,29 @@ struct ContentView: View {
         .toolbar {
             ToolbarItemGroup {
                 Button { model.chooseWorkingCopy() } label: {
-                    Label("打开", systemImage: "folder")
+                    Label(L10n.text("打开"), systemImage: "folder")
                 }
-                .quickHelp("打开本地工作副本")
+                .quickHelp(L10n.text("打开本地工作副本"))
                 .disabled(model.isBusy)
                 Button { showCheckout = true } label: {
-                    Label("检出远端", systemImage: "square.and.arrow.down")
+                    Label(L10n.text("检出远端"), systemImage: "square.and.arrow.down")
                 }
-                .quickHelp("检出远端仓库到本机")
+                .quickHelp(L10n.text("检出远端仓库到本机"))
                 .disabled(model.isBusy)
                 Button { model.refresh() } label: {
-                    Label("刷新", systemImage: "arrow.clockwise")
+                    Label(L10n.text("刷新"), systemImage: "arrow.clockwise")
                 }
-                .quickHelp("刷新：重新读取本地状态")
+                .quickHelp(L10n.text("刷新：重新读取本地状态"))
                 .disabled(model.isBusy || model.workingCopy == nil)
                 Button { showLogin = true } label: {
-                    Label("仓库账号", systemImage: "person.crop.circle")
+                    Label(L10n.text("仓库账号"), systemImage: "person.crop.circle")
                 }
-                .quickHelp("登录或切换当前仓库账号")
+                .quickHelp(L10n.text("登录或切换当前仓库账号"))
                 .disabled(model.isBusy || model.workingCopy == nil)
                 Button { model.update() } label: {
-                    Label("更新", systemImage: "arrow.down.circle")
+                    Label(L10n.text("更新"), systemImage: "arrow.down.circle")
                 }
-                .quickHelp("更新：从服务器获取最新版本")
+                .quickHelp(L10n.text("更新：从服务器获取最新版本"))
                 .disabled(model.isBusy || model.workingCopy == nil)
             }
         }
@@ -122,32 +122,32 @@ struct ContentView: View {
                 model.errorMessage = nil
             }
         }
-        .alert("清理工作副本锁？", isPresented: Binding(
+        .alert(L10n.text("清理工作副本锁？"), isPresented: Binding(
             get: { pathPendingCleanup != nil },
             set: { if !$0 { pathPendingCleanup = nil } }
         ), presenting: pathPendingCleanup) { path in
-            Button("取消", role: .cancel) { pathPendingCleanup = nil }
-            Button("清理") {
+            Button(L10n.text("取消"), role: .cancel) { pathPendingCleanup = nil }
+            Button(L10n.text("清理")) {
                 pathPendingCleanup = nil
                 model.cleanup(at: URL(fileURLWithPath: path))
             }
             .disabled(model.isBusy)
         } message: { path in
-            Text("\(path)\n\n请确认其他 SVN 客户端或终端已停止操作此副本。清理会完成未完成的本地管理任务并释放工作副本锁，不删除未受控文件。完成后可手动更新。")
+            Text(L10n.text("%@\n\n请确认其他 SVN 客户端或终端已停止操作此副本。清理会完成未完成的本地管理任务并释放工作副本锁，不删除未受控文件。完成后可手动更新。", path))
         }
-        .alert("从最近列表移除此工作副本？", isPresented: Binding(
+        .alert(L10n.text("从最近列表移除此工作副本？"), isPresented: Binding(
             get: { recentPathPendingRemoval != nil },
             set: { if !$0 { recentPathPendingRemoval = nil } }
         ), presenting: recentPathPendingRemoval) { path in
-            Button("取消", role: .cancel) { recentPathPendingRemoval = nil }
-            Button("移除记录", role: .destructive) {
+            Button(L10n.text("取消"), role: .cancel) { recentPathPendingRemoval = nil }
+            Button(L10n.text("移除记录"), role: .destructive) {
                 // 使用弹窗展示的路径，避免确认时误操作其他副本。
                 model.removeRecentPath(path)
                 recentPathPendingRemoval = nil
             }
             .disabled(model.isBusy)
         } message: { path in
-            Text("\(path)\n\n仅移除最近记录，不会删除本地文件。该副本的会话草稿将被清除；如果当前已打开，也会关闭其工作区。")
+            Text(L10n.text("%@\n\n仅移除最近记录，不会删除本地文件。该副本的会话草稿将被清除；如果当前已打开，也会关闭其工作区。", path))
         }
         .onChange(of: model.focusedPath) { _, _ in model.loadDiff() }
         .onChange(of: model.selectedPaths) { previous, current in
@@ -179,7 +179,7 @@ struct ContentView: View {
             }
             .padding(.top, 12)
             VStack(alignment: .leading, spacing: 10) {
-                Text("最近的工作副本").font(.caption.weight(.medium)).foregroundStyle(.secondary)
+                Text(L10n.text("最近的工作副本")).font(.caption.weight(.medium)).foregroundStyle(.secondary)
                     .padding(.horizontal, 10)
                 ScrollView {
                     VStack(alignment: .leading, spacing: 4) {
@@ -209,21 +209,21 @@ struct ContentView: View {
                                 Button {
                                     model.refresh(at: URL(fileURLWithPath: path))
                                 } label: {
-                                    Label("刷新工作副本", systemImage: "arrow.clockwise")
+                                    Label(L10n.text("刷新工作副本"), systemImage: "arrow.clockwise")
                                         .labelStyle(.titleAndIcon)
                                 }
                                 .disabled(model.isBusy)
                                 Button {
                                     model.update(at: URL(fileURLWithPath: path))
                                 } label: {
-                                    Label("更新工作副本", systemImage: "arrow.down.circle")
+                                    Label(L10n.text("更新工作副本"), systemImage: "arrow.down.circle")
                                         .labelStyle(.titleAndIcon)
                                 }
                                 .disabled(model.isBusy)
                                 Button {
                                     pathPendingCleanup = path
                                 } label: {
-                                    Label("清理工作副本锁…", systemImage: "wrench.and.screwdriver")
+                                    Label(L10n.text("清理工作副本锁…"), systemImage: "wrench.and.screwdriver")
                                         .labelStyle(.titleAndIcon)
                                 }
                                 .disabled(model.isBusy)
@@ -231,18 +231,18 @@ struct ContentView: View {
                                 Button {
                                     model.openInFinder(URL(fileURLWithPath: path))
                                 } label: {
-                                    Label("在访达中打开", systemImage: "folder")
+                                    Label(L10n.text("在访达中打开"), systemImage: "folder")
                                         .labelStyle(.titleAndIcon)
                                 }
                                 Divider()
                                 Button(role: .destructive) {
                                     recentPathPendingRemoval = path
                                 } label: {
-                                    Label("从最近列表中移除…", systemImage: "trash")
+                                    Label(L10n.text("从最近列表中移除…"), systemImage: "trash")
                                         .labelStyle(.titleAndIcon)
                                 }
                                 .disabled(model.isBusy)
-                                .help("仅从最近列表删除，不删除本地文件")
+                                .help(L10n.text("仅从最近列表删除，不删除本地文件"))
                             }
                         }
                     }
@@ -256,7 +256,7 @@ struct ContentView: View {
             VStack(spacing: 0) {
                 Divider()
                 HStack {
-                    SettingsLink { Label("设置", systemImage: "gearshape") }
+                    SettingsLink { Label(L10n.text("设置"), systemImage: "gearshape") }
                         .buttonStyle(.plain)
                     Spacer()
                 }
@@ -283,13 +283,13 @@ struct ContentView: View {
                 Button { showLogin = true } label: {
                     Label(
                         model.authenticationStore.authentication(for: copy.repositoryURL)
-                            .map { "账号：\($0.username)" } ?? "未在 App 登录",
+                            .map { L10n.text("账号：%@", $0.username) } ?? L10n.text("未在 App 登录"),
                         systemImage: "person.crop.circle"
                     )
                     .font(.caption)
                 }
                 .disabled(model.isBusy)
-                .help("账号按仓库地址隔离；未在 App 登录时使用本机 SVN 已有的认证配置。密码仅保留在当前 App 会话。")
+                .help(L10n.text("账号按仓库地址隔离；未在 App 登录时使用本机 SVN 已有的认证配置。密码仅保留在当前 App 会话。"))
                 Text("r\(copy.revision)").font(.system(.caption, design: .monospaced))
                     .padding(.horizontal, 10).padding(.vertical, 6)
                     .foregroundStyle(WorkspaceStyle.accent)
@@ -297,10 +297,10 @@ struct ContentView: View {
             }
             HStack(spacing: 12) {
                 HStack(spacing: 2) {
-                    tab("本地变更", count: model.entries.count, selected: !model.showHistory) {
+                    tab(L10n.text("本地变更"), count: model.entries.count, selected: !model.showHistory) {
                         model.showHistory = false
                     }
-                    tab("提交历史", count: nil, selected: model.showHistory) {
+                    tab(L10n.text("提交历史"), count: nil, selected: model.showHistory) {
                         model.showSavedHistory()
                     }
                 }
@@ -351,15 +351,15 @@ struct ContentView: View {
     private var fileComparisonView: some View {
         VStack(spacing: 0) {
             HStack {
-                TextField("筛选文件路径", text: $model.fileFilter)
+                TextField(L10n.text("筛选文件路径"), text: $model.fileFilter)
                     .textFieldStyle(.roundedBorder)
                     .disabled(model.isBusy)
-                Menu("目录忽略") {
-                    Button("编辑工作副本根目录…") { model.editDirectoryIgnores() }
-                    Button("选择受控目录…") { model.chooseDirectoryIgnores() }
+                Menu(L10n.text("目录忽略")) {
+                    Button(L10n.text("编辑工作副本根目录…")) { model.editDirectoryIgnores() }
+                    Button(L10n.text("选择受控目录…")) { model.chooseDirectoryIgnores() }
                 }
                 .fixedSize().disabled(model.isBusy)
-                Toggle("显示已忽略项", isOn: Binding(
+                Toggle(L10n.text("显示已忽略项"), isOn: Binding(
                     get: { model.showIgnored },
                     set: {
                         model.showIgnored = $0
@@ -368,23 +368,23 @@ struct ContentView: View {
                 ))
                     .toggleStyle(.checkbox)
                     .disabled(model.isBusy)
-                Text("\(visibleEntries.count) 项").font(.caption).foregroundStyle(.secondary)
+                Text(L10n.text("%@ 项", visibleEntries.count)).font(.caption).foregroundStyle(.secondary)
             }
             .padding(12)
             .background(Color.primary.opacity(0.025))
             Divider()
             if model.entries.isEmpty {
-                ContentUnavailableView("工作副本干净", systemImage: "checkmark.circle", description: Text("当前没有本地变更"))
+                ContentUnavailableView(L10n.text("工作副本干净"), systemImage: "checkmark.circle", description: Text(L10n.text("当前没有本地变更")))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if visibleEntries.isEmpty {
-                ContentUnavailableView("没有匹配的文件", systemImage: "magnifyingglass", description: Text("试试其他路径关键词"))
+                ContentUnavailableView(L10n.text("没有匹配的文件"), systemImage: "magnifyingglass", description: Text(L10n.text("试试其他路径关键词")))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView {
                     LazyVStack(spacing: 3) {
                         ForEach(visibleEntries) { entry in
                             HStack(spacing: 10) {
-                                Toggle("选择 \(entry.path)", isOn: Binding(
+                                Toggle(L10n.text("选择 %@", entry.path), isOn: Binding(
                                     get: { model.selectedPaths.contains(entry.path) },
                                     set: { selected in
                                         if selected { model.selectedPaths.insert(entry.path) }
@@ -415,9 +415,9 @@ struct ContentView: View {
                                         WorkspaceBadge(title: entry.label, color: statusColor(entry))
                                             .fixedSize()
                                             .help(entry.item == "unversioned"
-                                                ? "仅存在于本地，尚未加入 SVN；点击查看说明"
-                                                : entry.item == "ignored" ? "匹配 SVN 忽略规则；点击查看说明"
-                                                : entry.isConflict ? "点击查看冲突详情" : "点击查看文件差异")
+                                                ? L10n.text("仅存在于本地，尚未加入 SVN；点击查看说明")
+                                                : entry.item == "ignored" ? L10n.text("匹配 SVN 忽略规则；点击查看说明")
+                                                : entry.isConflict ? L10n.text("点击查看冲突详情") : L10n.text("点击查看文件差异"))
                                         Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.tertiary)
                                     }
                                     .contentShape(Rectangle())
@@ -432,35 +432,35 @@ struct ContentView: View {
                             }
                             .contextMenu {
                                 if entry.isConflict {
-                                    Button("查看冲突详情…") { model.inspectConflict(path: entry.path) }
+                                    Button(L10n.text("查看冲突详情…")) { model.inspectConflict(path: entry.path) }
                                         .disabled(model.isBusy)
                                 }
-                                Button("查看此路径历史") { model.loadHistory(path: entry.path) }
+                                Button(L10n.text("查看此路径历史")) { model.loadHistory(path: entry.path) }
                                     .disabled(model.isBusy || !entry.canReadHistory)
                                 if entry.path != ".", !entry.isConflict,
                                    !["unversioned", "ignored", "external", "deleted", "obstructed", "incomplete"].contains(entry.item) {
-                                    Button("重命名…") { model.beginFileOperation(.rename, path: entry.path) }
+                                    Button(L10n.text("重命名…")) { model.beginFileOperation(.rename, path: entry.path) }
                                         .disabled(model.isBusy)
-                                    Button("删除…", role: .destructive) { model.beginFileOperation(.delete, path: entry.path) }
+                                    Button(L10n.text("删除…"), role: .destructive) { model.beginFileOperation(.delete, path: entry.path) }
                                         .disabled(model.isBusy)
                                 }
-                                Button("还原此项目…") { model.prepareRevert(paths: [entry.path]) }
+                                Button(L10n.text("还原此项目…")) { model.prepareRevert(paths: [entry.path]) }
                                     .disabled(model.isBusy || !entry.canRevert)
                                 Divider()
                                 if entry.item == "unversioned" {
-                                    Button("忽略此名称…") { model.ignoreUnversioned(entry) }
+                                    Button(L10n.text("忽略此名称…")) { model.ignoreUnversioned(entry) }
                                         .disabled(model.isBusy)
                                     if !model.isLocalDirectory(entry.path), !(entry.path as NSString).pathExtension.isEmpty {
-                                        Button("忽略同扩展名…") { model.ignoreUnversioned(entry, byExtension: true) }
+                                        Button(L10n.text("忽略同扩展名…")) { model.ignoreUnversioned(entry, byExtension: true) }
                                             .disabled(model.isBusy)
                                     }
                                 }
-                                Button("编辑所在目录忽略…") {
+                                Button(L10n.text("编辑所在目录忽略…")) {
                                     model.editDirectoryIgnores(path: model.parentDirectory(of: entry.path))
                                 }
                                 .disabled(model.isBusy)
                                 if model.isLocalDirectory(entry.path), !["unversioned", "ignored"].contains(entry.item) {
-                                    Button("编辑此目录忽略…") { model.editDirectoryIgnores(path: entry.path) }
+                                    Button(L10n.text("编辑此目录忽略…")) { model.editDirectoryIgnores(path: entry.path) }
                                         .disabled(model.isBusy)
                                 }
                             }
@@ -472,18 +472,18 @@ struct ContentView: View {
             }
             Divider()
             HStack {
-                Text("已选 \(model.selectedPaths.count) 项").font(.caption)
+                Text(L10n.text("已选 %@ 项", model.selectedPaths.count)).font(.caption)
                 Spacer()
-                Button("取消选择") { model.selectedPaths = [] }
+                Button(L10n.text("取消选择")) { model.selectedPaths = [] }
                     .disabled(model.isBusy || model.selectedPaths.isEmpty)
-                Menu("文件操作") {
-                    Button("选择项目重命名…") { model.chooseFileOperation(.rename) }
-                    Button("选择项目删除…") { model.chooseFileOperation(.delete) }
+                Menu(L10n.text("文件操作")) {
+                    Button(L10n.text("选择项目重命名…")) { model.chooseFileOperation(.rename) }
+                    Button(L10n.text("选择项目删除…")) { model.chooseFileOperation(.delete) }
                 }
                 .disabled(model.isBusy)
-                Button("添加到 SVN") { model.addSelected() }
+                Button(L10n.text("添加到 SVN")) { model.addSelected() }
                     .disabled(!model.canAdd)
-                Button("还原选中项…") { model.prepareRevert() }
+                Button(L10n.text("还原选中项…")) { model.prepareRevert() }
                     .disabled(!model.canRevert)
             }
             .padding(10)
@@ -518,22 +518,22 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 12) {
                 Button { commitExpanded.toggle() } label: {
-                    Label("提交变更", systemImage: commitExpanded ? "chevron.down" : "chevron.right")
+                    Label(L10n.text("提交变更"), systemImage: commitExpanded ? "chevron.down" : "chevron.right")
                         .font(.headline)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(commitExpanded ? "收起提交说明" : "展开提交说明")
-                .help("折叠不会清除提交说明")
-                Text("已选 \(model.selectedPaths.count) 项")
+                .accessibilityLabel(commitExpanded ? L10n.text("收起提交说明") : L10n.text("展开提交说明"))
+                .help(L10n.text("折叠不会清除提交说明"))
+                Text(L10n.text("已选 %@ 项", model.selectedPaths.count))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 if !commitExpanded && !model.message.isEmpty {
-                    WorkspaceBadge(title: "有草稿", color: WorkspaceStyle.accent)
+                    WorkspaceBadge(title: L10n.text("有草稿"), color: WorkspaceStyle.accent)
                 }
                 Spacer(minLength: 0)
                 Button { model.prepareCommitSelected() } label: {
-                    Label("检查并提交", systemImage: "arrow.up")
+                    Label(L10n.text("检查并提交"), systemImage: "arrow.up")
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(!model.canCommit)
@@ -545,9 +545,9 @@ struct ContentView: View {
                         .scrollContentBackground(.hidden)
                         .frame(height: 64)
                         .disabled(model.isBusy)
-                        .accessibilityLabel("提交说明")
+                        .accessibilityLabel(L10n.text("提交说明"))
                     if model.message.isEmpty {
-                        Text("描述这次变更…")
+                        Text(L10n.text("描述这次变更…"))
                             .foregroundStyle(.tertiary)
                             .padding(.top, 1)
                             .padding(.leading, 5)
@@ -561,7 +561,7 @@ struct ContentView: View {
                         .strokeBorder(WorkspaceStyle.border, lineWidth: 1)
                         .allowsHitTesting(false)
                 }
-                Text("提交前检查范围；重命名和目录结构操作会列出关联项目")
+                Text(L10n.text("提交前检查范围；重命名和目录结构操作会列出关联项目"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -578,20 +578,20 @@ struct ContentView: View {
                 .padding(18)
                 .background(WorkspaceStyle.accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 24))
             VStack(alignment: .leading, spacing: 10) {
-                Text("你的项目，从这里开始").font(.system(size: 30, weight: .semibold))
-                Text("连接 SVN 仓库，让文件变更与提交记录一目了然。")
+                Text(L10n.text("你的项目，从这里开始")).font(.system(size: 30, weight: .semibold))
+                Text(L10n.text("连接 SVN 仓库，让文件变更与提交记录一目了然。"))
                     .font(.body).foregroundStyle(.secondary)
             }
             VStack(spacing: 12) {
-                welcomeAction("检出远端分支", subtitle: "连接仓库，浏览并下载需要的分支", icon: "arrow.down.to.line") {
+                welcomeAction(L10n.text("检出远端分支"), subtitle: L10n.text("连接仓库，浏览并下载需要的分支"), icon: "arrow.down.to.line") {
                     showCheckout = true
                 }
-                welcomeAction("打开本地工作副本", subtitle: "继续处理已经检出的项目", icon: "folder") {
+                welcomeAction(L10n.text("打开本地工作副本"), subtitle: L10n.text("继续处理已经检出的项目"), icon: "folder") {
                     model.chooseWorkingCopy()
                 }
             }
             .disabled(model.isBusy)
-            Text("支持 SVN 1.14+ · 引擎路径可在设置中调整")
+            Text(L10n.text("支持 SVN 1.14+ · 引擎路径可在设置中调整"))
                 .font(.caption).foregroundStyle(.tertiary)
         }
         .frame(width: 460).frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -625,16 +625,16 @@ struct ContentView: View {
                 Text(model.isBusy ? model.operation : (model.result.components(separatedBy: "\n").first ?? ""))
                     .font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 Spacer()
-                if model.isBusy { Button("取消") { model.cancel() }.controlSize(.small) }
+                if model.isBusy { Button(L10n.text("取消")) { model.cancel() }.controlSize(.small) }
                 Button { showOutput.toggle() } label: {
-                    Label(showOutput ? "收起输出" : "操作输出", systemImage: showOutput ? "chevron.down" : "chevron.up")
+                    Label(showOutput ? L10n.text("收起输出") : L10n.text("操作输出"), systemImage: showOutput ? "chevron.down" : "chevron.up")
                 }
                 .buttonStyle(.plain).font(.caption).foregroundStyle(.secondary)
             }
             .frame(height: statusRowHeight)
             if let recovery = model.checkoutRecovery {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("检出目录：\(recovery.destination.path)").textSelection(.enabled)
+                    Text(L10n.text("检出目录：%@", recovery.destination.path)).textSelection(.enabled)
                     if let inspection = recovery.inspection {
                         Text(inspection.summary)
                         Text(inspection.guidance).foregroundStyle(.secondary)
@@ -642,21 +642,21 @@ struct ContentView: View {
                             Text(copy.repositoryURL).foregroundStyle(.secondary).textSelection(.enabled)
                         }
                     } else if let error = recovery.error {
-                        Text("目录检查失败：\(error)").foregroundStyle(.red).textSelection(.enabled)
-                        Text("请在访达中检查保留的内容；修正错误后可重新检查目录。")
+                        Text(L10n.text("目录检查失败：%@", error)).foregroundStyle(.red).textSelection(.enabled)
+                        Text(L10n.text("请在访达中检查保留的内容；修正错误后可重新检查目录。"))
                     } else {
-                        Text("正在检查残留目录…")
+                        Text(L10n.text("正在检查残留目录…"))
                     }
                     HStack {
-                        Button("在访达中显示") {
+                        Button(L10n.text("在访达中显示")) {
                             NSWorkspace.shared.activateFileViewerSelecting([recovery.destination])
                         }
-                        Button("重新检查") { model.recheckCheckout() }
+                        Button(L10n.text("重新检查")) { model.recheckCheckout() }
                         if recovery.inspection?.workingCopy != nil {
-                            Button("打开并检查") { model.open(recovery.destination) }
+                            Button(L10n.text("打开并检查")) { model.open(recovery.destination) }
                         }
                         Spacer()
-                        Button("收起提示") { model.checkoutRecovery = nil }
+                        Button(L10n.text("收起提示")) { model.checkoutRecovery = nil }
                     }
                     .disabled(model.isBusy)
                 }
@@ -669,13 +669,13 @@ struct ContentView: View {
                         && context.date.timeIntervalSince(progress.lastOutputAt) >= 5
                     VStack(alignment: .leading, spacing: 5) {
                         HStack {
-                            Text("\(progress.title) · \(progress.phase.rawValue)")
+                            Text("\(progress.title) · \(progress.phase.title)")
                             Spacer()
                             let elapsed = Int((progress.finishedAt ?? context.date).timeIntervalSince(progress.startedAt))
-                            Text("已用时 \(elapsed / 60) 分 \(elapsed % 60) 秒").monospacedDigit()
+                            Text(L10n.text("已用时 %@ 分 %@ 秒", elapsed / 60, elapsed % 60)).monospacedDigit()
                         }
                         // 等待提示保留一行高度，输出恢复时不改变面板及侧栏分割线位置。
-                        Text("等待 SVN 新输出；取消不会撤销已完成的操作。")
+                        Text(L10n.text("等待 SVN 新输出；取消不会撤销已完成的操作。"))
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                             .opacity(awaitingOutput ? 1 : 0)
@@ -691,22 +691,22 @@ struct ContentView: View {
                         && context.date.timeIntervalSince(progress.lastOutputAt) >= 5
                     VStack(alignment: .leading, spacing: 5) {
                         HStack {
-                            Text("已检出 \(progress.completedItemCount) 项（文件/目录）")
+                            Text(L10n.text("已检出 %@ 项（文件/目录）", progress.completedItemCount))
                             Spacer()
                             let elapsed = Int(context.date.timeIntervalSince(progress.startedAt))
-                            Text("已用时 \(elapsed / 60) 分 \(elapsed % 60) 秒")
+                            Text(L10n.text("已用时 %@ 分 %@ 秒", elapsed / 60, elapsed % 60))
                                 .monospacedDigit()
                         }
                         if progress.isOpeningWorkingCopy {
-                            Text("下载完成，正在读取工作副本…")
+                            Text(L10n.text("下载完成，正在读取工作副本…"))
                         } else if let path = progress.lastCompletedPath {
-                            Text("最近完成：\(path)")
+                            Text(L10n.text("最近完成：%@", path))
                                 .lineLimit(1).truncationMode(.middle).help(path)
                         } else {
-                            Text("正在连接仓库，等待检出输出…")
+                            Text(L10n.text("正在连接仓库，等待检出输出…"))
                         }
                         // 大文件下载期间只切换提示可见性，不反复插入、移除布局行。
-                        Text("等待 SVN 新输出；大文件传输时可能暂时没有新记录，可取消操作。")
+                        Text(L10n.text("等待 SVN 新输出；大文件传输时可能暂时没有新记录，可取消操作。"))
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                             .opacity(awaitingOutput ? 1 : 0)
@@ -718,9 +718,9 @@ struct ContentView: View {
             }
             if showOutput {
                 HStack {
-                    Toggle("跟随最新输出", isOn: $followsOutput).toggleStyle(.checkbox)
+                    Toggle(L10n.text("跟随最新输出"), isOn: $followsOutput).toggleStyle(.checkbox)
                     Spacer()
-                    Button("复制完整输出") {
+                    Button(L10n.text("复制完整输出")) {
                         NSPasteboard.general.clearContents()
                         NSPasteboard.general.setString(model.result, forType: .string)
                     }

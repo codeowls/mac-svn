@@ -36,7 +36,7 @@ final class XMLReader: NSObject, XMLParserDelegate {
         parser.shouldResolveExternalEntities = false
         parser.delegate = reader
         guard parser.parse(), let root = reader.root else {
-            throw SVNError("无法解析 SVN XML：\(parser.parserError?.localizedDescription ?? "缺少根节点")")
+            throw SVNError(L10n.text("无法解析 SVN XML：%@", parser.parserError?.localizedDescription ?? L10n.text("缺少根节点")))
         }
         return root
     }
@@ -80,7 +80,7 @@ enum SVNXML {
               let url = entry.child("url")?.text,
               let repositoryRoot = entry.child("repository")?.child("root")?.text,
               let revision = entry.attributes["revision"] else {
-            throw SVNError("请选择远端仓库中的目录或分支，不能检出单个文件。")
+            throw SVNError(L10n.text("请选择远端仓库中的目录或分支，不能检出单个文件。"))
         }
         return RepositoryLocation(url: url, rootURL: repositoryRoot, revision: revision)
     }
@@ -88,12 +88,12 @@ enum SVNXML {
     static func repositoryEntries(_ xml: String) throws -> [RepositoryEntry] {
         let root = try XMLReader.parse(xml)
         guard root.name == "lists", let list = root.child("list") else {
-            throw SVNError("SVN 仓库目录响应格式不正确")
+            throw SVNError(L10n.text("SVN 仓库目录响应格式不正确"))
         }
         return try list.children.filter { $0.name == "entry" }.map { entry in
             guard let name = entry.child("name")?.text,
                   let kind = entry.attributes["kind"], ["dir", "file"].contains(kind) else {
-                throw SVNError("SVN 仓库目录响应缺少必要字段")
+                throw SVNError(L10n.text("SVN 仓库目录响应缺少必要字段"))
             }
             return RepositoryEntry(
                 name: name,
@@ -111,13 +111,13 @@ enum SVNXML {
 
     static func status(_ xml: String) throws -> [StatusEntry] {
         let root = try XMLReader.parse(xml)
-        guard root.name == "status" else { throw SVNError("SVN 状态响应格式不正确") }
+        guard root.name == "status" else { throw SVNError(L10n.text("SVN 状态响应格式不正确")) }
         return try root.descendants("entry").map { node in
             guard let path = node.attributes["path"],
                   let status = node.child("wc-status"),
                   let item = status.attributes["item"],
                   let properties = status.attributes["props"] else {
-                throw SVNError("SVN 状态响应缺少必要字段")
+                throw SVNError(L10n.text("SVN 状态响应缺少必要字段"))
             }
             return StatusEntry(
                 path: path,
@@ -136,28 +136,28 @@ enum SVNXML {
               let path = entry.child("wc-info")?.child("wcroot-abspath")?.text,
               let url = entry.child("url")?.text,
               let revision = entry.attributes["revision"] else {
-            throw SVNError("所选目录不是有效的 SVN 工作副本")
+            throw SVNError(L10n.text("所选目录不是有效的 SVN 工作副本"))
         }
         return WorkingCopy(root: URL(fileURLWithPath: path), repositoryURL: url, revision: revision)
     }
 
     static func log(_ xml: String) throws -> [LogEntry] {
         let root = try XMLReader.parse(xml)
-        guard root.name == "log" else { throw SVNError("SVN 历史响应格式不正确") }
+        guard root.name == "log" else { throw SVNError(L10n.text("SVN 历史响应格式不正确")) }
         return try root.children.filter { $0.name == "logentry" }.map { node in
             guard let revision = node.attributes["revision"] else {
-                throw SVNError("SVN 历史响应缺少版本号")
+                throw SVNError(L10n.text("SVN 历史响应缺少版本号"))
             }
             return LogEntry(
                 revision: revision,
-                author: node.child("author")?.text ?? "（无作者）",
+                author: node.child("author")?.text ?? L10n.text("（无作者）"),
                 date: node.child("date")?.text ?? "",
                 message: node.child("msg")?.text ?? "",
                 changedPaths: try (node.child("paths")?.children ?? [])
                     .filter { $0.name == "path" }
                     .map { path in
                         guard let action = path.attributes["action"], !path.text.isEmpty else {
-                            throw SVNError("SVN 历史变更项缺少路径或操作类型")
+                            throw SVNError(L10n.text("SVN 历史变更项缺少路径或操作类型"))
                         }
                         return LogChangedPath(
                             path: path.text,

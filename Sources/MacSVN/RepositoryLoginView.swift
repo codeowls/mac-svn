@@ -1,3 +1,4 @@
+import SVNCore
 import SwiftUI
 
 struct RepositoryLoginView: View {
@@ -13,25 +14,25 @@ struct RepositoryLoginView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            WorkspaceHeading(title: "登录 SVN 仓库", icon: "person.crop.circle")
+            WorkspaceHeading(title: L10n.text("登录 SVN 仓库"), icon: "person.crop.circle")
             Text(repository)
                 .font(.callout).textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
             VStack(alignment: .leading, spacing: 8) {
-                Text("账号")
-                TextField("SVN 账号", text: $username)
+                Text(L10n.text("账号"))
+                TextField(L10n.text("SVN 账号"), text: $username)
                     .textFieldStyle(.roundedBorder)
-                    .accessibilityLabel("SVN 账号")
-                Text("密码")
-                SecureField("SVN 密码", text: $password)
+                    .accessibilityLabel(L10n.text("SVN 账号"))
+                Text(L10n.text("密码"))
+                SecureField(L10n.text("SVN 密码"), text: $password)
                     .textFieldStyle(.roundedBorder)
-                    .accessibilityLabel("SVN 密码")
+                    .accessibilityLabel(L10n.text("SVN 密码"))
                     .onSubmit { login() }
             }
             .padding(16)
             .modifier(WorkspacePanel())
             .disabled(isLoading)
-            Text("密码仅用于本次 App 会话，退出后需重新登录。登录成功表示可以读取仓库，提交仍由服务器检查写权限。")
+            Text(L10n.text("密码仅用于本次 App 会话，退出后需重新登录。登录成功表示可以读取仓库，提交仍由服务器检查写权限。"))
                 .font(.caption).foregroundStyle(.secondary)
             if let errorMessage {
                 ScrollView {
@@ -47,15 +48,15 @@ struct RepositoryLoginView: View {
             HStack {
                 if isLoading {
                     ProgressView().controlSize(.small)
-                    Text("正在验证账号…").font(.caption)
+                    Text(L10n.text("正在验证账号…")).font(.caption)
                 }
                 Spacer()
-                Button("取消", role: .cancel) {
+                Button(L10n.text("取消"), role: .cancel) {
                     request?.cancel()
                     password = ""
                     dismiss()
                 }
-                Button("登录") { login() }
+                Button(L10n.text("登录")) { login() }
                     .buttonStyle(.borderedProminent)
                     .disabled(isLoading || model.isBusy || username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || password.isEmpty)
             }

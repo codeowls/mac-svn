@@ -7,12 +7,12 @@ struct DiffView: View {
 
     var body: some View {
         DiffContentView(
-            title: model.focusedPath ?? "文件差异",
-            subtitle: model.entries.first { $0.path == model.focusedPath }?.label ?? "文件差异",
+            title: model.focusedPath ?? L10n.text("文件差异"),
+            subtitle: model.entries.first { $0.path == model.focusedPath }?.label ?? L10n.text("文件差异"),
             text: model.diffText,
-            oldLabel: "原版本 · BASE",
-            newLabel: "本地工作副本",
-            footer: "对比本地基准版本与当前内容 · 不会修改文件",
+            oldLabel: L10n.text("原版本 · BASE"),
+            newLabel: L10n.text("本地工作副本"),
+            footer: L10n.text("对比本地基准版本与当前内容 · 不会修改文件"),
             fileURL: model.focusedPath.flatMap { model.workingCopy?.root.appendingPathComponent($0) }
         )
     }
@@ -39,31 +39,31 @@ struct DiffContentView: View {
             ScrollViewReader { proxy in
                 if !document.hunkIDs.isEmpty {
                     HStack(spacing: 12) {
-                        Picker("展示方式", selection: $sideBySide) {
-                            Text("统一").tag(false)
-                            Text("并排").tag(true)
+                        Picker(L10n.text("展示方式"), selection: $sideBySide) {
+                            Text(L10n.text("统一")).tag(false)
+                            Text(L10n.text("并排")).tag(true)
                         }
                         .pickerStyle(.segmented)
                         .frame(width: 150)
                         .labelsHidden()
-                        .accessibilityLabel("展示方式")
+                        .accessibilityLabel(L10n.text("展示方式"))
                         WorkspaceBadge(title: "+\(document.additions)", color: .green)
                         WorkspaceBadge(title: "−\(document.deletions)", color: .red)
                         Spacer()
-                        Text("\(hunkIndex + 1) / \(document.hunkIDs.count) 处变更")
+                        Text(L10n.text("%@ / %@ 处变更", hunkIndex + 1, document.hunkIDs.count))
                             .foregroundStyle(.secondary)
                         Button {
                             hunkIndex -= 1
                             proxy.scrollTo(document.hunkIDs[hunkIndex], anchor: .top)
                         } label: { Image(systemName: "chevron.up") }
                         .disabled(hunkIndex == 0)
-                        .help("上一处变更")
+                        .help(L10n.text("上一处变更"))
                         Button {
                             hunkIndex += 1
                             proxy.scrollTo(document.hunkIDs[hunkIndex], anchor: .top)
                         } label: { Image(systemName: "chevron.down") }
                         .disabled(hunkIndex == document.hunkIDs.count - 1)
-                        .help("下一处变更")
+                        .help(L10n.text("下一处变更"))
                     }
                     .font(.system(size: 12, design: .monospaced))
                     .padding(12)
@@ -130,7 +130,7 @@ struct DiffContentView: View {
                 Text(footer)
                     .font(.caption).foregroundStyle(.secondary)
                 Spacer()
-                Button("关闭") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button(L10n.text("关闭")) { dismiss() }.keyboardShortcut(.cancelAction)
             }
             .padding(12)
         }
@@ -154,18 +154,18 @@ struct DiffContentView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
-            Button("复制路径") {
+            Button(L10n.text("复制路径")) {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(title, forType: .string)
             }
             if !document.containsBinaryNotice {
-                Button("复制差异") {
+                Button(L10n.text("复制差异")) {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(text, forType: .string)
                 }
             }
             if let fileURL {
-                Button("在 Finder 中显示") {
+                Button(L10n.text("在 Finder 中显示")) {
                     NSWorkspace.shared.activateFileViewerSelecting([fileURL])
                 }
             }
@@ -180,25 +180,25 @@ struct DiffContentView: View {
             .contains((title as NSString).pathExtension.lowercased())
         return VStack(alignment: .leading, spacing: 24) {
             ContentUnavailableView {
-                Label(isWord ? "暂不支持 Word 内容对比" : "暂不支持此文件的内容对比",
+                Label(isWord ? L10n.text("暂不支持 Word 内容对比") : L10n.text("暂不支持此文件的内容对比"),
                       systemImage: "doc.richtext")
             } description: {
                 Text(isWord
-                     ? "此 Word 文档以二进制形式存储，当前查看器无法展示正文、表格或格式的变化。这不代表两个版本内容相同。"
-                     : "此文件以二进制形式存储，当前查看器无法展示其内容变化。这不代表两个版本内容相同。")
+                     ? L10n.text("此 Word 文档以二进制形式存储，当前查看器无法展示正文、表格或格式的变化。这不代表两个版本内容相同。")
+                     : L10n.text("此文件以二进制形式存储，当前查看器无法展示其内容变化。这不代表两个版本内容相同。"))
             }
             VStack(alignment: .leading, spacing: 10) {
-                Text("原版本：\(oldLabel)")
-                Text("新版本：\(newLabel)")
+                Text(L10n.text("原版本：%@", oldLabel))
+                Text(L10n.text("新版本：%@", newLabel))
             }
             .font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
-            DisclosureGroup("技术详情（SVN 原始输出及属性变更）") {
+            DisclosureGroup(L10n.text("技术详情（SVN 原始输出及属性变更）")) {
                 VStack(alignment: .leading, spacing: 12) {
                     Text(text)
                         .font(.system(.caption, design: .monospaced))
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                    Button("复制诊断信息") {
+                    Button(L10n.text("复制诊断信息")) {
                         NSPasteboard.general.clearContents()
                         NSPasteboard.general.setString(text, forType: .string)
                     }

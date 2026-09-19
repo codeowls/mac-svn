@@ -3,13 +3,14 @@ import PackageDescription
 
 let package = Package(
     name: "MacSVN",
+    defaultLocalization: "zh-Hans",
     platforms: [.macOS(.v14)],
     products: [
         .executable(name: "MacSVN", targets: ["MacSVN"]),
         .library(name: "SVNCore", targets: ["SVNCore"])
     ],
     targets: [
-        .target(name: "SVNCore"),
+        .target(name: "SVNCore", resources: [.process("Resources")]),
         .executableTarget(name: "MacSVN", dependencies: ["SVNCore"])
     ]
 )

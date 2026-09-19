@@ -46,6 +46,8 @@ mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
 lipo -create "${BINARIES[@]}" -output "$APP_DIR/Contents/MacOS/MacSVN"
 cp "$PWD/assets/AppIcon.icns" "$APP_DIR/Contents/Resources/AppIcon.icns"
 cp "$PWD/LICENSE" "$APP_DIR/Contents/Resources/LICENSE"
+# SwiftPM's generated accessor looks for localized resources in the app's Resources directory.
+cp -R "$BIN_DIR/MacSVN_SVNCore.bundle" "$APP_DIR/Contents/Resources/"
 cat > "$APP_DIR/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -58,7 +60,7 @@ cat > "$APP_DIR/Contents/Info.plist" <<PLIST
     <key>CFBundleIconFile</key><string>AppIcon.icns</string>
     <key>CFBundleDevelopmentRegion</key><string>zh-Hans</string>
     <key>CFBundleLocalizations</key>
-    <array><string>zh-Hans</string></array>
+    <array><string>zh-Hans</string><string>en</string></array>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleShortVersionString</key><string>$APP_VERSION</string>
     <key>CFBundleVersion</key><string>$APP_VERSION</string>

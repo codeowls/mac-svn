@@ -4,7 +4,8 @@ import SVNCore
 
 struct SettingsView: View {
     @ObservedObject var model: AppModel
-    @ViewState private var tab = "engine"
+    @ViewState private var tab = "general"
+    @AppStorage(AppLanguage.preferenceKey) private var language = AppLanguage.chinese.rawValue
     @ViewState private var executablePath = ""
     @ViewState private var useCustomIgnores = false
     @ViewState private var ignorePatterns = ""
@@ -15,17 +16,20 @@ struct SettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            WorkspaceHeading(title: "SVN 设置", icon: "gearshape")
-            Picker("设置分类", selection: $tab) {
-                Text("设置").tag("engine")
-                Text("忽略").tag("ignores")
-                Text("合并工具").tag("merge")
+            WorkspaceHeading(title: L10n.text("SVN 设置"), icon: "gearshape")
+            Picker(L10n.text("设置分类"), selection: $tab) {
+                Text(L10n.text("通用")).tag("general")
+                Text("SVN").tag("engine")
+                Text(L10n.text("忽略")).tag("ignores")
+                Text(L10n.text("合并工具")).tag("merge")
             }
             .pickerStyle(.segmented)
-            .frame(width: 330)
+            .frame(width: 460)
 
             Group {
-                if tab == "engine" {
+                if tab == "general" {
+                    generalSettings
+                } else if tab == "engine" {
                     engineSettings
                 } else if tab == "merge" {
                     MergeToolSettingsView()
@@ -33,27 +37,27 @@ struct SettingsView: View {
                     ignoreSettings
                 }
             }
-            .disabled(model.isBusy || isTesting)
+            .disabled(tab != "general" && (model.isBusy || isTesting))
             .padding(16)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .modifier(WorkspacePanel())
 
-            if tab != "merge" {
+            if tab == "engine" || tab == "ignores" {
                 Divider()
                 HStack(alignment: .top) {
                     if isTesting {
                         ProgressView().controlSize(.small)
-                        Text("正在检查 SVN…").font(.caption)
-                        Button("取消") { request?.cancel() }
+                        Text(L10n.text("正在检查 SVN…")).font(.caption)
+                        Button(L10n.text("取消")) { request?.cancel() }
                     } else {
-                        Text(model.isBusy ? "当前有操作正在进行，请完成后保存。" : feedback)
+                        Text(model.isBusy ? L10n.text("当前有操作正在进行，请完成后保存。") : feedback)
                             .font(.caption)
                             .foregroundStyle(isError ? Color.red : Color.secondary)
                             .textSelection(.enabled)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     Spacer(minLength: 16)
-                    Button("保存设置") { testExecutable(save: true) }
+                    Button(L10n.text("保存设置")) { testExecutable(save: true) }
                         .buttonStyle(.borderedProminent)
                         .disabled(model.isBusy || isTesting)
                 }
@@ -68,39 +72,61 @@ struct SettingsView: View {
         .onChange(of: executablePath) { _, _ in clearFeedback() }
         .onChange(of: useCustomIgnores) { _, _ in clearFeedback() }
         .onChange(of: ignorePatterns) { _, _ in clearFeedback() }
+        .onChange(of: language) { _, value in
+            AppLanguage(rawValue: value)?.save()
+        }
+    }
+
+    private var generalSettings: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text(L10n.text("界面语言")).font(.headline)
+            Picker(L10n.text("语言"), selection: $language) {
+                ForEach(AppLanguage.allCases) { language in
+                    Text(language.displayName).tag(language.rawValue)
+                }
+            }
+            .frame(maxWidth: 300)
+            Text(L10n.text("语言选择自动保存，重新打开 Mac SVN 后生效。"))
+                .font(.callout)
+                .foregroundStyle(.secondary)
+            if language != L10n.language.rawValue {
+                Label(L10n.text("语言已保存，请退出并重新打开应用。"), systemImage: "info.circle")
+                    .font(.callout)
+            }
+        }
     }
 
     private var engineSettings: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("SVN 可执行文件").font(.headline)
-            TextField("例如 /opt/homebrew/bin/svn", text: $executablePath)
+            Text(L10n.text("SVN 可执行文件")).font(.headline)
+            TextField(L10n.text("例如 /opt/homebrew/bin/svn"), text: $executablePath)
                 .textFieldStyle(.roundedBorder)
-                .accessibilityLabel("SVN 可执行文件路径")
+                .accessibilityLabel(L10n.text("SVN 可执行文件路径"))
             HStack {
-                Button("选择文件…") { chooseExecutable() }
-                Button("自动检测") { discoverExecutable() }
-                Button("测试") { testExecutable(save: false) }
+                Button(L10n.text("选择文件…")) { chooseExecutable() }
+                Button(L10n.text("自动检测")) { discoverExecutable() }
+                Button(L10n.text("测试")) { testExecutable(save: false) }
             }
-            Text("使用本机安装的 SVN 1.14 或更新版本。测试仅查询本机版本，不连接仓库；保存前会再次检查。")
+            Text(L10n.text("使用本机安装的 SVN 1.14 或更新版本。测试仅查询本机版本，不连接仓库；保存前会再次检查。"))
                 .font(.callout).foregroundStyle(.secondary)
-            Text("尚未安装时，可在终端运行：")
+            Text(L10n.text("尚未安装时，可在终端运行："))
                 .font(.caption).foregroundStyle(.secondary)
             Text("brew install subversion")
                 .font(.system(.callout, design: .monospaced)).textSelection(.enabled)
-            Text("仓库账号仍在检出窗口或工具栏中管理。密码仅保留在当前 App 会话，未登录时沿用本机 SVN 认证配置。")
+            Text(L10n.text("仓库账号仍在检出窗口或工具栏中管理。密码仅保留在当前 App 会话，未登录时沿用本机 SVN 认证配置。"))
                 .font(.caption).foregroundStyle(.secondary)
         }
     }
 
     private var ignoreSettings: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Toggle("使用自定义全局忽略列表（仅此应用）", isOn: $useCustomIgnores)
+            Toggle(L10n.text("使用自定义全局忽略列表（仅此应用）"), isOn: $useCustomIgnores)
                 .toggleStyle(.checkbox)
             Text(useCustomIgnores
-                 ? "保存后用于本应用的所有工作副本，替代系统的全局忽略列表；目录忽略属性仍然生效。"
-                 : "当前沿用系统 SVN 的忽略配置。启用自定义后可编辑下方规则。")
+                 ? L10n.text("保存后用于本应用的所有工作副本，替代系统的全局忽略列表；目录忽略属性仍然生效。")
+                 : L10n.text("当前沿用系统 SVN 的忽略配置。启用自定义后可编辑下方规则。"))
                 .font(.caption).foregroundStyle(.secondary)
-            Text("文件或目录名称模式，以空格或换行分隔")
+            Text(L10n.text("文件或目录名称模式，以空格或换行分隔"))
                 .font(.callout)
             TextEditor(text: $ignorePatterns)
                 .font(.system(size: 13, design: .monospaced))
@@ -110,17 +136,17 @@ struct SettingsView: View {
                 .overlay(RoundedRectangle(cornerRadius: 6).stroke(.separator))
                 .frame(height: 130)
                 .disabled(!useCustomIgnores)
-                .accessibilityLabel("全局忽略文件模式")
+                .accessibilityLabel(L10n.text("全局忽略文件模式"))
             HStack {
-                Button("填入常用规则") {
+                Button(L10n.text("填入常用规则")) {
                     ignorePatterns = SVNConfiguration.suggestedGlobalIgnores
                 }
                 .disabled(!useCustomIgnores)
                 Spacer()
-                Text("例如：.DS_Store  .idea  *.iml")
+                Text(L10n.text("例如：.DS_Store  .idea  *.iml"))
                     .font(.caption).foregroundStyle(.secondary)
             }
-            Text("只影响未受版本控制的项目，不删除文件，也不隐藏已受控文件的修改。\n支持 *、?、[abc] 通配符；不是 .gitignore 语法。自定义列表留空表示不设置全局忽略。")
+            Text(L10n.text("只影响未受版本控制的项目，不删除文件，也不隐藏已受控文件的修改。\n支持 *、?、[abc] 通配符；不是 .gitignore 语法。自定义列表留空表示不设置全局忽略。"))
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -140,8 +166,8 @@ struct SettingsView: View {
 
     private func chooseExecutable() {
         let panel = NSOpenPanel()
-        panel.title = "选择 SVN 可执行文件"
-        panel.prompt = "选择"
+        panel.title = L10n.text("选择 SVN 可执行文件")
+        panel.prompt = L10n.text("选择")
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
@@ -154,7 +180,7 @@ struct SettingsView: View {
         if let url = SVNClient.discoverExecutable() {
             executablePath = url.path
         } else {
-            feedback = "未在常见安装位置找到 SVN，请安装或手动选择。"
+            feedback = L10n.text("未在常见安装位置找到 SVN，请安装或手动选择。")
             isError = true
         }
     }
@@ -176,12 +202,12 @@ struct SettingsView: View {
                 try Task.checkCancellation()
                 if save {
                     try model.saveSettings(executablePath: executable.path, globalIgnores: normalized)
-                    feedback = "设置已保存 · SVN \(version)。当前副本会刷新，其他副本下次打开时生效。"
+                    feedback = L10n.text("设置已保存 · SVN %@。当前副本会刷新，其他副本下次打开时生效。", version)
                 } else {
-                    feedback = "测试通过 · SVN \(version)"
+                    feedback = L10n.text("测试通过 · SVN %@", version)
                 }
             } catch is CancellationError {
-                feedback = "检查已取消，设置未保存。"
+                feedback = L10n.text("检查已取消，设置未保存。")
             } catch {
                 feedback = error.localizedDescription
                 isError = true

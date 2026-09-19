@@ -11,7 +11,7 @@ public enum SVNConfiguration {
     /// SVN 全局忽略使用空白分隔的文件名通配符；保留顺序，不把 # 当作注释。
     public static func normalizeIgnorePatterns(_ text: String) throws -> String {
         guard !text.contains("\0") else {
-            throw SVNError("忽略规则不能包含空字符。")
+            throw SVNError(L10n.text("忽略规则不能包含空字符。"))
         }
         var seen: Set<String> = []
         return text.split(whereSeparator: \.isWhitespace)
@@ -22,12 +22,12 @@ public enum SVNConfiguration {
 
     /// 目录忽略按行分隔，名称中的空格有意义，不能复用全局忽略的空白拆分。
     public static func normalizeDirectoryIgnores(_ text: String) throws -> String {
-        guard !text.contains("\0") else { throw SVNError("忽略规则不能包含空字符。") }
+        guard !text.contains("\0") else { throw SVNError(L10n.text("忽略规则不能包含空字符。")) }
         let lines = text.replacingOccurrences(of: "\r\n", with: "\n")
             .replacingOccurrences(of: "\r", with: "\n")
             .split(separator: "\n", omittingEmptySubsequences: true)
         guard !lines.contains(where: { $0.contains("/") }) else {
-            throw SVNError("目录忽略每行填写一个名称或通配符，不包含 / 路径；规则只作用于该目录的直接子项。")
+            throw SVNError(L10n.text("目录忽略每行填写一个名称或通配符，不包含 / 路径；规则只作用于该目录的直接子项。"))
         }
         return lines.isEmpty ? "" : lines.joined(separator: "\n") + "\n"
     }
@@ -36,7 +36,7 @@ public enum SVNConfiguration {
     public static func literalIgnorePattern(_ name: String) throws -> String {
         guard !name.isEmpty, ![".", ".."].contains(name),
               !name.contains("/"), !name.contains("\0"), !name.contains(where: \.isNewline) else {
-            throw SVNError("该名称不能表示为一行目录忽略规则。")
+            throw SVNError(L10n.text("该名称不能表示为一行目录忽略规则。"))
         }
         return name.map { character in
             "\\*?[]".contains(character) ? "\\" + String(character) : String(character)
@@ -51,7 +51,7 @@ public enum SVNConfiguration {
               FileManager.default.fileExists(atPath: expanded, isDirectory: &isDirectory),
               !isDirectory.boolValue,
               FileManager.default.isExecutableFile(atPath: expanded) else {
-            throw SVNError("请选择有效的 SVN 可执行文件，例如 /opt/homebrew/bin/svn。")
+            throw SVNError(L10n.text("请选择有效的 SVN 可执行文件，例如 /opt/homebrew/bin/svn。"))
         }
         return URL(fileURLWithPath: expanded).standardizedFileURL
     }

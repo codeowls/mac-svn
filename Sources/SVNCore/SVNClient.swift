@@ -28,10 +28,10 @@ public struct SVNClient: Sendable {
         let version = output.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
         let parts = version.split(separator: ".")
         guard parts.count >= 2, let major = Int(parts[0]), let minor = Int(parts[1]) else {
-            throw SVNError("未识别到 SVN 版本，请检查所选文件。\n\(output.stdout)\(output.stderr)")
+            throw SVNError(L10n.text("未识别到 SVN 版本，请检查所选文件。\n%@%@", output.stdout, output.stderr))
         }
         guard major > 1 || (major == 1 && minor >= 14) else {
-            throw SVNError("当前 SVN 版本为 \(version)，本应用需要 SVN 1.14 或更新版本。")
+            throw SVNError(L10n.text("当前 SVN 版本为 %@，本应用需要 SVN 1.14 或更新版本。", version))
         }
         return version
     }
@@ -56,7 +56,7 @@ public struct SVNClient: Sendable {
         let output = try await command(
             ["diff", "--internal-diff", "--depth", "empty", "--old", target], in: directory
         )
-        return output.stdout.isEmpty ? "没有可显示的文本差异。二进制文件或仅目录变更可能没有文本内容。" : output.stdout
+        return output.stdout.isEmpty ? L10n.text("没有可显示的文本差异。二进制文件或仅目录变更可能没有文本内容。") : output.stdout
     }
 
     public func history(at directory: URL) async throws -> [LogEntry] {
@@ -71,7 +71,7 @@ public struct SVNClient: Sendable {
         pageSize: Int = 50
     ) async throws -> HistoryPage {
         guard pageSize > 0, pageSize < Int.max else {
-            throw SVNError("历史分页大小必须为正整数。")
+            throw SVNError(L10n.text("历史分页大小必须为正整数。"))
         }
         let target = try localTarget(path)
         if path != "." {
@@ -79,13 +79,13 @@ public struct SVNClient: Sendable {
             let info = try await command(["info", "--xml", "--", target], in: directory)
             let copy = try SVNXML.info(info.stdout)
             guard copy.root.resolvingSymlinksInPath() == directory.resolvingSymlinksInPath() else {
-                throw SVNError("所选路径属于另一个工作副本，请单独打开该副本后查看历史。")
+                throw SVNError(L10n.text("所选路径属于另一个工作副本，请单独打开该副本后查看历史。"))
             }
         }
         let start: String
         if let beforeRevision {
             guard beforeRevision > 0 else {
-                throw SVNError("历史分页版本号必须大于 0。")
+                throw SVNError(L10n.text("历史分页版本号必须大于 0。"))
             }
             start = String(beforeRevision - 1)
         } else {
@@ -102,7 +102,7 @@ public struct SVNClient: Sendable {
         var nextBeforeRevision: Int?
         if logs.count > pageSize {
             guard let revision = entries.last?.revision, let value = Int(revision), value > 0 else {
-                throw SVNError("SVN 历史响应中的分页版本号无效。")
+                throw SVNError(L10n.text("SVN 历史响应中的分页版本号无效。"))
             }
             nextBeforeRevision = value
         }
@@ -113,7 +113,7 @@ public struct SVNClient: Sendable {
     public func historicalDiff(change: LogChangedPath, revision: String, at directory: URL) async throws -> HistoricalDiff {
         guard let revision = Int(revision), revision > 0,
               ["A", "D", "M", "R"].contains(change.action) else {
-            throw SVNError("无法识别历史差异的版本号或变更类型。")
+            throw SVNError(L10n.text("无法识别历史差异的版本号或变更类型。"))
         }
         let relativePath = try historicalRelativePath(change.path)
         let info = try await command(["info", "--xml", "--", ".@"], in: directory)
@@ -121,23 +121,23 @@ public struct SVNClient: Sendable {
         let arguments: [String]
         let oldLabel: String
         let newLabel = change.action == "D"
-            ? "\(change.path) · r\(revision)（已删除）"
+            ? L10n.text("%@ · r%@（已删除）", change.path, revision)
             : "\(change.path) · r\(revision)"
         if change.action == "A", let source = change.copyFromPath {
             let sourcePath = try historicalRelativePath(source)
             guard let sourceRevision = change.copyFromRevision.flatMap(Int.init),
                   sourceRevision >= 0, sourceRevision < revision,
                   let rootURL = URL(string: root) else {
-                throw SVNError("复制来源的路径或版本号无效。")
+                throw SVNError(L10n.text("复制来源的路径或版本号无效。"))
             }
-            oldLabel = "\(source) · r\(sourceRevision)（复制来源）"
+            oldLabel = L10n.text("%@ · r%@（复制来源）", source, sourceRevision)
             arguments = [
                 "diff", "--internal-diff", "--depth", "empty",
                 "--old", rootURL.appendingPathComponent(sourcePath).absoluteString + "@\(sourceRevision)",
                 "--new", rootURL.appendingPathComponent(relativePath).absoluteString + "@\(revision)"
             ]
         } else {
-            oldLabel = "\(change.path) · r\(revision - 1)" + (change.action == "A" ? "（不存在）" : "")
+            oldLabel = "\(change.path) · r\(revision - 1)" + (change.action == "A" ? L10n.text("（不存在）") : "")
             // 用两端都存在的仓库根作为锚点，处理新增/删除路径；替换按删除旧节点并新增显示。
             // 这里的 PATH 是根 URL 下的相对路径，不使用本地目标的尾随 @ 转义。
             arguments = [
@@ -150,7 +150,7 @@ public struct SVNClient: Sendable {
         return HistoricalDiff(
             oldLabel: oldLabel,
             newLabel: newLabel,
-            text: text.isEmpty ? "这两个版本没有文本或属性差异；纯复制可能与来源完全相同。" : text
+            text: text.isEmpty ? L10n.text("这两个版本没有文本或属性差异；纯复制可能与来源完全相同。") : text
         )
     }
 
@@ -158,7 +158,7 @@ public struct SVNClient: Sendable {
     public func historicalFileVersions(change: LogChangedPath, revision: String) throws -> HistoricalFileVersions {
         guard let revision = Int(revision), revision > 0,
               ["A", "D", "M", "R"].contains(change.action) else {
-            throw SVNError("无法识别历史文件的版本号或变更类型。")
+            throw SVNError(L10n.text("无法识别历史文件的版本号或变更类型。"))
         }
         _ = try historicalRelativePath(change.path)
         let before: HistoricalFileVersion?
@@ -166,7 +166,7 @@ public struct SVNClient: Sendable {
             _ = try historicalRelativePath(source)
             guard let sourceRevision = change.copyFromRevision.flatMap(Int.init),
                   sourceRevision >= 0, sourceRevision < revision else {
-                throw SVNError("复制来源的版本号无效。")
+                throw SVNError(L10n.text("复制来源的版本号无效。"))
             }
             before = HistoricalFileVersion(path: source, revision: sourceRevision, isCopySource: true)
         } else {
@@ -184,12 +184,12 @@ public struct SVNClient: Sendable {
         let info = try await command(["info", "--xml", "--", ".@"], in: directory)
         let root = try SVNXML.repositoryInfo(info.stdout).rootURL
         guard let rootURL = URL(string: root) else {
-            throw SVNError("仓库根地址无效。")
+            throw SVNError(L10n.text("仓库根地址无效。"))
         }
         let target = rootURL.appendingPathComponent(relativePath).absoluteString + "@\(version.revision)"
         let metadata = try await command(["info", "--xml", "-r", String(version.revision), "--", target])
         guard try XMLReader.parse(metadata.stdout).child("entry")?.attributes["kind"] == "file" else {
-            throw SVNError("所选版本是目录，不能作为单个文件导出。")
+            throw SVNError(L10n.text("所选版本是目录，不能作为单个文件导出。"))
         }
         let output = try await command(["cat", "--ignore-keywords", "-r", String(version.revision), "--", target])
         try Task.checkCancellation()
@@ -199,7 +199,7 @@ public struct SVNClient: Sendable {
     private func historicalRelativePath(_ path: String) throws -> String {
         guard path.hasPrefix("/"), !path.contains("\0"),
               !path.split(separator: "/").contains(where: { $0 == ".." || $0 == "." }) else {
-            throw SVNError("历史路径必须是仓库根目录下的绝对路径。")
+            throw SVNError(L10n.text("历史路径必须是仓库根目录下的绝对路径。"))
         }
         return path == "/" ? "." : String(path.dropFirst())
     }
@@ -235,7 +235,7 @@ public struct SVNClient: Sendable {
         let target = try Self.repositoryTarget(repository)
         if let selectedDirectories {
             guard !selectedDirectories.isEmpty else {
-                throw SVNError("请至少勾选一个目录。")
+                throw SVNError(L10n.text("请至少勾选一个目录。"))
             }
             for name in selectedDirectories {
                 _ = try Self.childRepositoryURL(parent: repository, name: name)
@@ -244,19 +244,19 @@ public struct SVNClient: Sendable {
             let entries = try await listRepository(repository)
             let directories = Set(entries.filter(\.isDirectory).map(\.name))
             guard Set(selectedDirectories).isSubset(of: directories) else {
-                throw SVNError("勾选项已不存在或不是目录，请重新浏览仓库后选择。")
+                throw SVNError(L10n.text("勾选项已不存在或不是目录，请重新浏览仓库后选择。"))
             }
         }
         let fileManager = FileManager.default
         var isDirectory: ObjCBool = false
         if fileManager.fileExists(atPath: destination.path, isDirectory: &isDirectory) {
             guard isDirectory.boolValue else {
-                throw SVNError("检出目标不是文件夹，请选择或新建一个空文件夹。")
+                throw SVNError(L10n.text("检出目标不是文件夹，请选择或新建一个空文件夹。"))
             }
             // Finder 的目录显示设置不影响检出，其他隐藏文件仍按非空内容处理。
             let contents = try fileManager.contentsOfDirectory(atPath: destination.path)
             guard contents.allSatisfy({ $0 == ".DS_Store" }) else {
-                throw SVNError("检出目标文件夹不为空，请选择或新建一个空文件夹；已有工作副本请直接打开。")
+                throw SVNError(L10n.text("检出目标文件夹不为空，请选择或新建一个空文件夹；已有工作副本请直接打开。"))
             }
         }
         var result = ""
@@ -276,7 +276,7 @@ public struct SVNClient: Sendable {
         // 仅恢复本次从空目录开始的检出；子进程已退出，最多自动清理、续传两次。
         for attempt in 1...2 {
             try Task.checkCancellation()
-            let notice = "\n检出传输中断，正在自动恢复（\(attempt)/2）：清理工作副本锁后继续更新。\n"
+            let notice = L10n.text("\n检出传输中断，正在自动恢复（%@/2）：清理工作副本锁后继续更新。\n", attempt)
             result += transferError.diagnostic + notice
             onOutput?(notice)
             try await Task.sleep(for: .seconds(1))
@@ -288,7 +288,7 @@ public struct SVNClient: Sendable {
             let actualURL = URL(string: copy.repositoryURL)?.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
             guard copy.root.resolvingSymlinksInPath().path == destination.resolvingSymlinksInPath().path,
                   actualURL == expectedURL else {
-                throw SVNError("自动恢复已停止：目标工作副本与本次检出目录或仓库不一致。\n\(transferError.message)")
+                throw SVNError(L10n.text("自动恢复已停止：目标工作副本与本次检出目录或仓库不一致。\n%@", transferError.message))
             }
             // 清理失败必须停止，不能继续更新，更不能删除目录后重新检出。
             result += try await cleanup(at: destination, onOutput: onOutput)
@@ -305,14 +305,14 @@ public struct SVNClient: Sendable {
                 )
                 result += update.stdout + update.stderr
                 result += try await expandCheckoutDirectories(selectedDirectories, at: destination, onOutput: onOutput)
-                let completed = "\n自动恢复完成。\n"
+                let completed = L10n.text("\n自动恢复完成。\n")
                 onOutput?(completed)
                 return result + completed
             } catch let error as SVNError where error.isInterruptedTransfer {
                 transferError = error
             }
         }
-        throw SVNError("自动恢复已尝试 2 次，检出仍未完成；已下载文件保留，请检查网络或服务器后继续更新。\n\n\(transferError.message)")
+        throw SVNError(L10n.text("自动恢复已尝试 2 次，检出仍未完成；已下载文件保留，请检查网络或服务器后继续更新。\n\n%@", transferError.message))
     }
 
     /// 初次检出和恢复使用同一组选中目录，包含中断时尚未开始下载的目录。
@@ -337,27 +337,27 @@ public struct SVNClient: Sendable {
         var isDirectory: ObjCBool = false
         guard manager.fileExists(atPath: directory.path, isDirectory: &isDirectory) else {
             return CheckoutInspection(
-                directory: directory, workingCopy: nil, summary: "目标目录尚未创建。",
-                guidance: "可修正原始错误后重新检出。"
+                directory: directory, workingCopy: nil, summary: L10n.text("目标目录尚未创建。"),
+                guidance: L10n.text("可修正原始错误后重新检出。")
             )
         }
         guard isDirectory.boolValue else {
-            throw SVNError("检出目标不是文件夹：\(directory.path)")
+            throw SVNError(L10n.text("检出目标不是文件夹：%@", directory.path))
         }
         let contents = try manager.contentsOfDirectory(atPath: directory.path)
         guard contents.contains(".svn") else {
             let empty = contents.allSatisfy { $0 == ".DS_Store" }
             return CheckoutInspection(
                 directory: directory, workingCopy: nil,
-                summary: empty ? "目标文件夹为空，未发现 SVN 元数据。" : "目标文件夹有内容，但未发现 SVN 元数据。",
-                guidance: empty ? "可修正原始错误后重新检出。"
-                    : "请在访达中核对并保留所需文件，重新检出时选择其他空目录。"
+                summary: empty ? L10n.text("目标文件夹为空，未发现 SVN 元数据。") : L10n.text("目标文件夹有内容，但未发现 SVN 元数据。"),
+                guidance: empty ? L10n.text("可修正原始错误后重新检出。")
+                    : L10n.text("请在访达中核对并保留所需文件，重新检出时选择其他空目录。")
             )
         }
         let copy = try await workingCopy(at: directory)
         // 目标 URL 可能创建于目录出现之前，比较规范路径，避免目录尾随斜线造成误判。
         guard copy.root.resolvingSymlinksInPath().path == directory.resolvingSymlinksInPath().path else {
-            throw SVNError("目标未识别为独立工作副本，请在访达中检查：\(directory.path)")
+            throw SVNError(L10n.text("目标未识别为独立工作副本，请在访达中检查：%@", directory.path))
         }
         // verbose 包含正常但带工作副本锁的节点；仅检查本地，不能据此断言已完整下载。
         let output = try await command(["status", "--xml", "--verbose", "--ignore-externals", "--", ".@"], in: directory)
@@ -368,10 +368,10 @@ public struct SVNClient: Sendable {
         let conflicts = entries.filter(\.isConflict).count
         return CheckoutInspection(
             directory: directory, workingCopy: copy,
-            summary: "已识别工作副本；不完整／缺失／阻塞 \(incomplete) 项，冲突 \(conflicts) 项。"
-                + (locked ? " 检测到工作副本锁。" : ""),
-            guidance: (locked ? "确认其他 SVN 操作已结束后，右键左侧副本选择“清理工作副本锁…”，再重新检查。" : "")
-                + "可打开副本检查状态，再手动更新补齐；本地检查不能证明检出完整。不要直接在此非空目录重新检出。"
+            summary: L10n.text("已识别工作副本；不完整／缺失／阻塞 %@ 项，冲突 %@ 项。", incomplete, conflicts)
+                + (locked ? L10n.text(" 检测到工作副本锁。") : ""),
+            guidance: (locked ? L10n.text("确认其他 SVN 操作已结束后，右键左侧副本选择“清理工作副本锁…”，再重新检查。") : "")
+                + L10n.text("可打开副本检查状态，再手动更新补齐；本地检查不能证明检出完整。不要直接在此非空目录重新检出。")
         )
     }
 
@@ -392,10 +392,10 @@ public struct SVNClient: Sendable {
     public static func childRepositoryURL(parent: String, name: String) throws -> String {
         _ = try repositoryTarget(parent)
         guard !name.isEmpty, ![".", ".."].contains(name), !name.contains("/") else {
-            throw SVNError("无效的仓库目录名称")
+            throw SVNError(L10n.text("无效的仓库目录名称"))
         }
         guard let url = URL(string: parent) else {
-            throw SVNError("无效的仓库 URL")
+            throw SVNError(L10n.text("无效的仓库 URL"))
         }
         return url.appendingPathComponent(name).absoluteString
     }
@@ -407,13 +407,13 @@ public struct SVNClient: Sendable {
               scheme == "file" || !(url.host ?? "").isEmpty,
               url.password == nil, url.query == nil, url.fragment == nil,
               !repository.contains(where: { $0.isNewline || $0 == "\0" }) else {
-            throw SVNError("请输入完整的 SVN 仓库或分支 URL，且不要在 URL 中包含密码、查询参数或片段。")
+            throw SVNError(L10n.text("请输入完整的 SVN 仓库或分支 URL，且不要在 URL 中包含密码、查询参数或片段。"))
         }
         return repository + "@"
     }
 
     public func add(paths: [String], at directory: URL) async throws -> String {
-        guard !paths.isEmpty else { throw SVNError("请先选择未跟踪文件") }
+        guard !paths.isEmpty else { throw SVNError(L10n.text("请先选择未跟踪文件")) }
         // Empty depth prevents a selected directory from silently adding all of its children.
         let targets = try paths.sorted().map(localTarget)
         let output = try await command(["add", "--depth", "empty", "--"] + targets, in: directory)
@@ -430,22 +430,22 @@ public struct SVNClient: Sendable {
               info?.attributes["kind"] == "dir",
               let schedule = info?.child("wc-info")?.child("schedule")?.text,
               ["normal", "add"].contains(schedule) else {
-            throw SVNError("请选择当前工作副本中有效的受控目录；不能修改外部副本或待删除、替换目录的忽略规则。")
+            throw SVNError(L10n.text("请选择当前工作副本中有效的受控目录；不能修改外部副本或待删除、替换目录的忽略规则。"))
         }
         let current = try await status(at: directory, includeIgnored: true)
         if let entry = current.first(where: { $0.path == path }),
            entry.isConflict || ["missing", "obstructed", "incomplete", "external"].contains(entry.item) {
-            throw SVNError("目录状态不允许编辑忽略规则：\(path)。请先处理冲突或异常状态。")
+            throw SVNError(L10n.text("目录状态不允许编辑忽略规则：%@。请先处理冲突或异常状态。", path))
         }
         let properties = try await command(["proplist", "--xml", "--verbose", "--depth", "empty", "--", target], in: directory)
         let xml = try XMLReader.parse(properties.stdout)
-        guard xml.name == "properties" else { throw SVNError("SVN 属性响应格式不正确。") }
+        guard xml.name == "properties" else { throw SVNError(L10n.text("SVN 属性响应格式不正确。")) }
         let property = xml.descendants("property").first { $0.attributes["name"] == "svn:ignore" }
         var patterns = property?.text
         if let encoding = property?.attributes["encoding"] {
             guard encoding == "base64", let data = Data(base64Encoded: property?.text ?? ""),
                   let text = String(data: data, encoding: .utf8) else {
-                throw SVNError("目录忽略属性不是有效的 UTF-8 文本，无法编辑。")
+                throw SVNError(L10n.text("目录忽略属性不是有效的 UTF-8 文本，无法编辑。"))
             }
             patterns = text
         }
@@ -458,9 +458,9 @@ public struct SVNClient: Sendable {
         let expected: String? = normalized.isEmpty ? nil : normalized
         let current = try await directoryIgnores(path: settings.path, at: settings.root)
         guard current.patterns == settings.patterns else {
-            throw SVNError("编辑期间目录忽略规则已变化，尚未保存。请关闭后重新读取规则。")
+            throw SVNError(L10n.text("编辑期间目录忽略规则已变化，尚未保存。请关闭后重新读取规则。"))
         }
-        guard current.patterns != expected else { return "目录忽略规则没有变化。" }
+        guard current.patterns != expected else { return L10n.text("目录忽略规则没有变化。") }
         try Task.checkCancellation()
         let target = try localTarget(settings.path)
         let arguments = expected.map {
@@ -469,9 +469,9 @@ public struct SVNClient: Sendable {
         let output = try await command(arguments, in: settings.root)
         let saved = try await directoryIgnores(path: settings.path, at: settings.root)
         guard saved.patterns == expected else {
-            throw SVNError("保存命令已执行，但读回的目录忽略规则与预期不一致，请刷新后检查。")
+            throw SVNError(L10n.text("保存命令已执行，但读回的目录忽略规则与预期不一致，请刷新后检查。"))
         }
-        return "目录忽略规则已保存为本地属性变更；提交该目录后才会共享到仓库。\n" + output.stdout + output.stderr
+        return L10n.text("目录忽略规则已保存为本地属性变更；提交该目录后才会共享到仓库。\n") + output.stdout + output.stderr
     }
 
     /// 从 SVN 冲突元数据读取真实的基准、本地及传入版本路径；查看不会自动解决冲突。
@@ -479,47 +479,47 @@ public struct SVNClient: Sendable {
         let target = try localTarget(path)
         let current = try await status(at: directory)
         guard let entry = current.first(where: { $0.path == path }), entry.isConflict else {
-            throw SVNError("该路径已不处于冲突状态，请刷新后检查。")
+            throw SVNError(L10n.text("该路径已不处于冲突状态，请刷新后检查。"))
         }
         let output = try await command(["info", "--xml", "--depth", "empty", "--", target], in: directory)
         let copy = try SVNXML.info(output.stdout)
         guard copy.root.resolvingSymlinksInPath().path == directory.resolvingSymlinksInPath().path,
               let info = try XMLReader.parse(output.stdout).child("entry") else {
-            throw SVNError("冲突路径不属于当前工作副本。")
+            throw SVNError(L10n.text("冲突路径不属于当前工作副本。"))
         }
         let nodes = info.children.filter { ["conflict", "tree-conflict"].contains($0.name) }
-        guard !nodes.isEmpty else { throw SVNError("SVN 未返回冲突详情，请刷新后重新读取。") }
+        guard !nodes.isEmpty else { throw SVNError(L10n.text("SVN 未返回冲突详情，请刷新后重新读取。")) }
         var summary: [String] = []
         var files: [ConflictFile] = []
         if info.attributes["kind"] == "file", FileManager.default.fileExists(atPath: directory.appendingPathComponent(path).path) {
-            files.append(ConflictFile(id: "working", title: "当前工作文件", url: directory.appendingPathComponent(path)))
+            files.append(ConflictFile(id: "working", title: L10n.text("当前工作文件"), url: directory.appendingPathComponent(path)))
         }
         for node in nodes {
             let type = node.name == "tree-conflict" ? "tree" : node.attributes["type"] ?? "unknown"
-            let typeLabel = ["text": "文件内容冲突", "property": "属性冲突", "tree": "树冲突"][type] ?? "未知冲突"
-            let operation = node.attributes["operation"] ?? "未知"
-            let operationLabel = ["update": "更新", "switch": "切换", "merge": "合并"][operation] ?? operation
-            summary.append(typeLabel + " · 操作：" + operationLabel)
+            let typeLabel = ["text": L10n.text("文件内容冲突"), "property": L10n.text("属性冲突"), "tree": L10n.text("树冲突")][type] ?? L10n.text("未知冲突")
+            let operation = node.attributes["operation"] ?? L10n.text("未知")
+            let operationLabel = ["update": L10n.text("更新"), "switch": L10n.text("切换"), "merge": L10n.text("合并")][operation] ?? operation
+            summary.append(typeLabel + L10n.text(" · 操作：") + operationLabel)
             if type == "tree" {
-                let reason = node.attributes["reason"] ?? "未知"
-                let action = node.attributes["action"] ?? "未知"
+                let reason = node.attributes["reason"] ?? L10n.text("未知")
+                let action = node.attributes["action"] ?? L10n.text("未知")
                 let reasonLabel = [
-                    "edit": "本地修改", "delete": "本地删除", "missing": "本地缺失", "obstructed": "路径被占用",
-                    "added": "本地新增", "replaced": "本地替换", "unversioned": "未受控项目",
-                    "moved-away": "已移走", "moved-here": "已移入"
+                    "edit": L10n.text("本地修改"), "delete": L10n.text("本地删除"), "missing": L10n.text("本地缺失"), "obstructed": L10n.text("路径被占用"),
+                    "added": L10n.text("本地新增"), "replaced": L10n.text("本地替换"), "unversioned": L10n.text("未受控项目"),
+                    "moved-away": L10n.text("已移走"), "moved-here": L10n.text("已移入")
                 ][reason] ?? reason
-                let actionLabel = ["edit": "修改", "delete": "删除", "add": "新增", "replace": "替换"][action] ?? action
-                summary.append("本地原因：\(reasonLabel) · 传入操作：\(actionLabel)")
+                let actionLabel = ["edit": L10n.text("修改"), "delete": L10n.text("删除"), "add": L10n.text("新增"), "replace": L10n.text("替换")][action] ?? action
+                summary.append(L10n.text("本地原因：%@ · 传入操作：%@", reasonLabel, actionLabel))
             }
             for version in node.children where version.name == "version" {
-                let label = version.attributes["side"] == "source-left" ? "原基准版本" : "传入版本"
-                let kind = version.attributes["kind"] ?? "未知类型"
-                let kindLabel = ["file": "文件", "dir": "目录", "none": "节点不存在"][kind] ?? kind
+                let label = version.attributes["side"] == "source-left" ? L10n.text("原基准版本") : L10n.text("传入版本")
+                let kind = version.attributes["kind"] ?? L10n.text("未知类型")
+                let kindLabel = ["file": L10n.text("文件"), "dir": L10n.text("目录"), "none": L10n.text("节点不存在")][kind] ?? kind
                 summary.append("\(label)：/\(version.attributes["path-in-repos"] ?? "") · r\(version.attributes["revision"] ?? "?") · \(kindLabel)")
             }
             for (key, title) in [
-                ("prev-base-file", "原基准内容"), ("prev-wc-file", "合并前本地内容"),
-                ("cur-base-file", "传入内容"), ("prop-file", "属性冲突说明")
+                ("prev-base-file", L10n.text("原基准内容")), ("prev-wc-file", L10n.text("合并前本地内容")),
+                ("cur-base-file", L10n.text("传入内容")), ("prop-file", L10n.text("属性冲突说明"))
             ] {
                 if let file = node.child(key), !file.text.isEmpty {
                     files.append(ConflictFile(id: key, title: title, url: URL(fileURLWithPath: file.text)))
@@ -549,7 +549,7 @@ public struct SVNClient: Sendable {
         let path = file.url.resolvingSymlinksInPath().path
         guard path.hasPrefix(root + "/"),
               try FileManager.default.attributesOfItem(atPath: file.url.path)[.type] as? FileAttributeType == .typeRegular else {
-            throw SVNError("冲突查看仅支持当前工作副本内的普通文件，不跟随符号链接。")
+            throw SVNError(L10n.text("冲突查看仅支持当前工作副本内的普通文件，不跟随符号链接。"))
         }
         return try Data(contentsOf: file.url)
     }
@@ -560,7 +560,7 @@ public struct SVNClient: Sendable {
         guard current.canMarkResolved, current.entry == details.entry,
               current.metadataDigest == details.metadataDigest,
               let working = current.files.first(where: { $0.id == "working" }) else {
-            throw SVNError("冲突状态已变化，或包含尚不支持直接标记的属性／树冲突。请重新读取详情。")
+            throw SVNError(L10n.text("冲突状态已变化，或包含尚不支持直接标记的属性／树冲突。请重新读取详情。"))
         }
         let data = try conflictFileContent(working, at: details.root)
         let text = String(data: data, encoding: .utf8)
@@ -569,7 +569,7 @@ public struct SVNClient: Sendable {
         } ?? false
         return ConflictResolutionPlan(
             details: details,
-            preview: text ?? "当前内容不是 UTF-8 文本（\(data.count) 字节）。请用合适的编辑器检查最终文件后再确认。",
+            preview: text ?? L10n.text("当前内容不是 UTF-8 文本（%@ 字节）。请用合适的编辑器检查最终文件后再确认。", data.count),
             containsConflictMarkers: markers, contentDigest: SHA256.hash(data: data).description
         )
     }
@@ -578,7 +578,7 @@ public struct SVNClient: Sendable {
     public func resolveConflict(_ plan: ConflictResolutionPlan) async throws -> String {
         let fresh = try await prepareConflictResolution(plan.details)
         guard fresh.contentDigest == plan.contentDigest else {
-            throw SVNError("确认期间工作文件内容已变化，尚未标记解决。请重新检查最终内容。")
+            throw SVNError(L10n.text("确认期间工作文件内容已变化，尚未标记解决。请重新检查最终内容。"))
         }
         try Task.checkCancellation()
         let output = try await command(
@@ -587,9 +587,9 @@ public struct SVNClient: Sendable {
         )
         let entries = try await status(at: plan.details.root)
         guard !entries.contains(where: { $0.path == plan.details.entry.path && $0.isConflict }) else {
-            throw SVNError("标记命令已执行，但该文件仍处于冲突状态，请重新检查。\n\(output.stdout)\(output.stderr)")
+            throw SVNError(L10n.text("标记命令已执行，但该文件仍处于冲突状态，请重新检查。\n%@%@", output.stdout, output.stderr))
         }
-        return "已保留当前工作文件并标记解决；尚未提交到仓库。\n" + output.stdout + output.stderr
+        return L10n.text("已保留当前工作文件并标记解决；尚未提交到仓库。\n") + output.stdout + output.stderr
     }
 
     /// Re-read the working copy before committing; never trust an old UI status snapshot.
@@ -599,44 +599,44 @@ public struct SVNClient: Sendable {
     ) async throws -> String {
         let plan = try await prepareCommit(paths: paths, message: message, at: directory)
         guard Set(plan.items.map { $0.path }) == Set(paths) else {
-            throw SVNError("此提交涉及关联路径，请先检查并确认完整提交清单。")
+            throw SVNError(L10n.text("此提交涉及关联路径，请先检查并确认完整提交清单。"))
         }
         return try await commit(plan, onOutput: onOutput)
     }
 
     /// 只生成待确认清单，不修改文件；目录按 empty 深度处理，结构性目录还原另行支持。
     public func prepareRevert(paths: [String], at directory: URL) async throws -> RevertPlan {
-        guard !paths.isEmpty else { throw SVNError("请先选择需要还原的项目。") }
+        guard !paths.isEmpty else { throw SVNError(L10n.text("请先选择需要还原的项目。")) }
         let paths = Set(paths)
         let current = try await status(at: directory)
         var items: [RevertItem] = []
         for path in paths.sorted() {
             let target = try localTarget(path)
             guard let entry = current.first(where: { $0.path == path }), entry.canRevert else {
-                throw SVNError("\(path) 当前不能还原，请刷新状态；冲突需通过冲突处理流程解决。")
+                throw SVNError(L10n.text("%@ 当前不能还原，请刷新状态；冲突需通过冲突处理流程解决。", path))
             }
             let output = try await command(["info", "--xml", "--", target], in: directory)
             let copy = try SVNXML.info(output.stdout)
             guard copy.root.resolvingSymlinksInPath() == directory.resolvingSymlinksInPath() else {
-                throw SVNError("不能跨工作副本还原：\(path)。")
+                throw SVNError(L10n.text("不能跨工作副本还原：%@。", path))
             }
             let info = try XMLReader.parse(output.stdout).child("entry")
             let isDirectory = info?.attributes["kind"] == "dir"
             if isDirectory, entry.copied || ["deleted", "replaced", "missing"].contains(entry.item) {
-                throw SVNError("目录删除、替换、缺失或带历史复制可能影响未选子项，当前不支持直接还原：\(path)。")
+                throw SVNError(L10n.text("目录删除、替换、缺失或带历史复制可能影响未选子项，当前不支持直接还原：%@。", path))
             }
             if isDirectory, entry.item == "added" {
                 let children = current.filter {
                     $0.path.hasPrefix(path + "/") && !["unversioned", "ignored", "external"].contains($0.item)
                 }
                 guard children.allSatisfy({ paths.contains($0.path) }) else {
-                    throw SVNError("还原新增目录前，请一并选择已纳入版本控制的子项：\(path)。")
+                    throw SVNError(L10n.text("还原新增目录前，请一并选择已纳入版本控制的子项：%@。", path))
                 }
             }
             // SVN move 的两端存在元数据关联，不能把其中一端当作独立复制或删除还原。
             let wcInfo = info?.child("wc-info")
             guard wcInfo?.child("moved-from") == nil, wcInfo?.child("moved-to") == nil else {
-                throw SVNError("移动操作涉及源路径和目标路径，当前不支持单独还原：\(path)。")
+                throw SVNError(L10n.text("移动操作涉及源路径和目标路径，当前不支持单独还原：%@。", path))
             }
             // 已安排删除的路径没有可读取的 WORKING 属性，确认清单使用将恢复的 BASE 属性。
             let propertyRevision = entry.item == "deleted" ? ["--revision", "BASE"] : []
@@ -648,13 +648,13 @@ public struct SVNClient: Sendable {
             let effect: String
             switch entry.item {
             case "added":
-                effect = entry.copied ? "撤销复制安排，并删除复制产生的本地文件及其未提交修改。" : "撤销新增安排，保留本地文件或目录；属性修改将丢弃。"
+                effect = entry.copied ? L10n.text("撤销复制安排，并删除复制产生的本地文件及其未提交修改。") : L10n.text("撤销新增安排，保留本地文件或目录；属性修改将丢弃。")
             case "deleted", "missing":
-                effect = "恢复工作副本 BASE 版本的文件及属性，取消删除安排；现有本地内容将被覆盖。"
+                effect = L10n.text("恢复工作副本 BASE 版本的文件及属性，取消删除安排；现有本地内容将被覆盖。")
             case "replaced":
-                effect = "丢弃替换后的内容与属性，恢复原文件的 BASE 版本。"
+                effect = L10n.text("丢弃替换后的内容与属性，恢复原文件的 BASE 版本。")
             default:
-                effect = isDirectory ? "丢弃当前目录的属性修改，不还原未选子项。" : "丢弃未提交的内容与属性修改，恢复工作副本 BASE 版本。"
+                effect = isDirectory ? L10n.text("丢弃当前目录的属性修改，不还原未选子项。") : L10n.text("丢弃未提交的内容与属性修改，恢复工作副本 BASE 版本。")
             }
             items.append(RevertItem(
                 entry: entry, isDirectory: isDirectory, effect: effect, preview: preview,
@@ -669,7 +669,7 @@ public struct SVNClient: Sendable {
     public func revert(_ plan: RevertPlan) async throws -> String {
         let fresh = try await prepareRevert(paths: plan.items.map { $0.entry.path }, at: plan.root)
         guard fresh.items == plan.items else {
-            throw SVNError("确认期间文件或状态发生变化，尚未执行还原。请重新检查还原清单。")
+            throw SVNError(L10n.text("确认期间文件或状态发生变化，尚未执行还原。请重新检查还原清单。"))
         }
         try Task.checkCancellation()
         let paths = plan.items.map { $0.entry.path }.sorted {
@@ -680,7 +680,7 @@ public struct SVNClient: Sendable {
         let output = try await command(["revert", "--depth", "empty", "--"] + paths.map(localTarget), in: plan.root)
         let remaining = try await status(at: plan.root)
         guard !remaining.contains(where: { paths.contains($0.path) && !["unversioned", "ignored"].contains($0.item) }) else {
-            throw SVNError("还原命令已执行，但部分目标仍有未提交修改，请检查状态。\n\(output.stdout)\(output.stderr)")
+            throw SVNError(L10n.text("还原命令已执行，但部分目标仍有未提交修改，请检查状态。\n%@%@", output.stdout, output.stderr))
         }
         return output.stdout + output.stderr
     }
@@ -700,7 +700,7 @@ public struct SVNClient: Sendable {
             return SHA256.hash(data: Data(try manager.destinationOfSymbolicLink(atPath: url.path).utf8)).description
         }
         guard attributes[.type] as? FileAttributeType == .typeRegular else {
-            throw SVNError("目标不是普通文件或符号链接：\(url.lastPathComponent)。")
+            throw SVNError(L10n.text("目标不是普通文件或符号链接：%@。", url.lastPathComponent))
         }
         let handle = try FileHandle(forReadingFrom: url)
         defer { handle.closeFile() }
@@ -715,7 +715,7 @@ public struct SVNClient: Sendable {
     func localTarget(_ path: String) throws -> String {
         guard !path.isEmpty, !path.hasPrefix("/"),
               !path.split(separator: "/").contains(".."), !path.contains("\0") else {
-            throw SVNError("文件路径必须位于当前工作副本内")
+            throw SVNError(L10n.text("文件路径必须位于当前工作副本内"))
         }
         return "./" + path + "@"
     }

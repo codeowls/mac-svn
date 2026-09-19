@@ -7,11 +7,11 @@ public struct SVNAuthentication: Sendable {
     public init(username: String, password: String) throws {
         let username = username.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !username.isEmpty, !password.isEmpty else {
-            throw SVNError("请输入账号和密码。")
+            throw SVNError(L10n.text("请输入账号和密码。"))
         }
         guard !username.contains("\0"),
               !password.contains("\0"), !password.contains("\n"), !password.contains("\r") else {
-            throw SVNError("账号不能包含空字符，密码不能包含空字符或换行。")
+            throw SVNError(L10n.text("账号不能包含空字符，密码不能包含空字符或换行。"))
         }
         self.username = username
         self.password = password

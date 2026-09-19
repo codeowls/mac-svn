@@ -24,12 +24,18 @@ enum HistoryState {
 }
 
 struct WriteOperationProgress {
-    enum Phase: String {
-        case running = "进行中"
-        case completed = "完成"
-        case failed = "失败"
-        case cancelled = "已取消"
-        case completedWithWarning = "操作已完成，状态刷新未完成"
+    enum Phase {
+        case running, completed, failed, cancelled, completedWithWarning
+
+        var title: String {
+            switch self {
+            case .running: L10n.text("进行中")
+            case .completed: L10n.text("完成")
+            case .failed: L10n.text("失败")
+            case .cancelled: L10n.text("已取消")
+            case .completedWithWarning: L10n.text("操作已完成，状态刷新未完成")
+            }
+        }
     }
 
     let id = UUID()
@@ -80,7 +86,7 @@ final class AppModel: ObservableObject {
     @Published var entries: [StatusEntry] = []
     @Published var selectedPaths: Set<String> = []
     @Published var focusedPath: String?
-    @Published var diffText = "选择一个文件查看差异"
+    @Published var diffText = L10n.text("选择一个文件查看差异")
     @Published var logs: [LogEntry] = []
     @Published var selectedHistoryRevision: String?
     @Published private(set) var historyState: HistoryState = .idle
@@ -93,7 +99,7 @@ final class AppModel: ObservableObject {
     @Published var message = ""
     @Published var fileFilter = ""
     @Published var operation = ""
-    @Published var result = "欢迎使用 Mac SVN"
+    @Published var result = L10n.text("欢迎使用 Mac SVN")
     @Published var errorMessage: String?
     @Published var recentPaths: [String] = UserDefaults.standard.stringArray(forKey: "workingCopies") ?? []
     @Published private(set) var recentRepositoryURLs: [String] =
@@ -140,7 +146,7 @@ final class AppModel: ObservableObject {
 
     func client(for repository: String? = nil) throws -> SVNClient {
         guard FileManager.default.isExecutableFile(atPath: executablePath) else {
-            throw SVNError("未找到 SVN。请先运行 brew install subversion，并在设置中指定 svn 可执行文件。")
+            throw SVNError(L10n.text("未找到 SVN。请先运行 brew install subversion，并在设置中指定 svn 可执行文件。"))
         }
         let authentication = (repository ?? workingCopy?.repositoryURL).flatMap {
             authenticationStore.authentication(for: $0)
@@ -155,11 +161,11 @@ final class AppModel: ObservableObject {
     /// 登录仅做远端读取验证，成功后按仓库根路径保存会话，不自动重试写操作。
     func authenticate(repository: String, username: String, password: String) async throws {
         guard !isBusy else {
-            throw SVNError("请等待当前操作完成。")
+            throw SVNError(L10n.text("请等待当前操作完成。"))
         }
         guard let scheme = URLComponents(string: repository)?.scheme?.lowercased(),
               ["http", "https", "svn"].contains(scheme) else {
-            throw SVNError("账号密码登录支持 http://、https:// 和 svn:// 地址。file:// 不需要登录，svn+ssh:// 使用系统 SSH 认证。")
+            throw SVNError(L10n.text("账号密码登录支持 http://、https:// 和 svn:// 地址。file:// 不需要登录，svn+ssh:// 使用系统 SSH 认证。"))
         }
         let authentication = try SVNAuthentication(username: username, password: password)
         let executable = try client(for: repository).executable
@@ -174,13 +180,13 @@ final class AppModel: ObservableObject {
 
     func chooseWorkingCopy() {
         guard let window = mainWindow else {
-            errorMessage = "未能定位主窗口，请重新打开应用后再选择工作副本。"
+            errorMessage = L10n.text("未能定位主窗口，请重新打开应用后再选择工作副本。")
             return
         }
         let panel = NSOpenPanel()
-        panel.title = "打开 SVN 工作副本"
-        panel.prompt = "打开"
-        panel.message = "选择已经检出的本地工作副本。远端仓库请使用“检出远端”。"
+        panel.title = L10n.text("打开 SVN 工作副本")
+        panel.prompt = L10n.text("打开")
+        panel.message = L10n.text("选择已经检出的本地工作副本。远端仓库请使用“检出远端”。")
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
@@ -191,9 +197,9 @@ final class AppModel: ObservableObject {
     }
 
     func open(_ directory: URL) {
-        perform("读取工作副本") {
+        perform(L10n.text("读取工作副本")) {
             let copy = try await self.readWorkingCopy(at: directory)
-            self.result = "已打开 \(copy.root.lastPathComponent)，\(self.entries.count) 项状态记录"
+            self.result = L10n.text("已打开 %@，%@ 项状态记录", copy.root.lastPathComponent, self.entries.count)
         }
     }
 
@@ -202,11 +208,11 @@ final class AppModel: ObservableObject {
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: directory.path, isDirectory: &isDirectory),
               isDirectory.boolValue else {
-            errorMessage = "工作副本目录不存在：\(directory.path)"
+            errorMessage = L10n.text("工作副本目录不存在：%@", directory.path)
             return
         }
         if !NSWorkspace.shared.open(directory) {
-            errorMessage = "无法在访达中打开：\(directory.path)"
+            errorMessage = L10n.text("无法在访达中打开：%@", directory.path)
         }
     }
 
@@ -232,7 +238,7 @@ final class AppModel: ObservableObject {
         fileFilter = draft.fileFilter
         showIgnored = draft.showIgnored
         focusedPath = nil
-        diffText = "选择一个文件查看差异"
+        diffText = L10n.text("选择一个文件查看差异")
         resetHistory()
         historyFilter = draft.historyFilter
         historyPath = draft.historyPath
@@ -267,19 +273,19 @@ final class AppModel: ObservableObject {
 
     func refresh(at directory: URL? = nil) {
         guard let directory = directory ?? workingCopy?.root else { return }
-        perform("刷新本地状态") {
+        perform(L10n.text("刷新本地状态")) {
             if self.workingCopy?.root == directory {
                 try await self.reload()
             } else {
                 _ = try await self.readWorkingCopy(at: directory)
             }
-            self.result = "本地状态已刷新"
+            self.result = L10n.text("本地状态已刷新")
         }
     }
 
     /// 清理仅由用户显式触发，不删除未受控文件，也不自动重试网络操作。
     func cleanup(at directory: URL) {
-        perform("清理工作副本锁", streamOutput: true) {
+        perform(L10n.text("清理工作副本锁"), streamOutput: true) {
             let copy = try await self.readWorkingCopy(at: directory)
             let client = try self.client(for: copy.repositoryURL)
             try await self.receiveLiveOutput { onOutput in
@@ -287,13 +293,13 @@ final class AppModel: ObservableObject {
             }
             self.writeProgress?.phase = .completed
             try await self.reload()
-            self.result += "\n工作副本清理完成，可手动更新继续下载。"
+            self.result += L10n.text("\n工作副本清理完成，可手动更新继续下载。")
         }
     }
 
     func update(at directory: URL? = nil) {
         guard let directory = directory ?? workingCopy?.root else { return }
-        perform("更新工作副本", refreshAfterFailure: true, streamOutput: true) {
+        perform(L10n.text("更新工作副本"), refreshAfterFailure: true, streamOutput: true) {
             let copy: WorkingCopy
             if let current = self.workingCopy, current.root == directory {
                 copy = current
@@ -307,7 +313,7 @@ final class AppModel: ObservableObject {
             self.writeProgress?.phase = .completed
             try await self.reload()
             if self.entries.contains(where: \.isConflict) {
-                self.result += "\n更新产生冲突，请点击冲突项目查看详情；处理最终内容后再检查并标记解决。"
+                self.result += L10n.text("\n更新产生冲突，请点击冲突项目查看详情；处理最终内容后再检查并标记解决。")
             }
         }
     }
@@ -315,13 +321,13 @@ final class AppModel: ObservableObject {
     func addSelected() {
         guard let copy = workingCopy, canAdd else { return }
         let paths = selectedPaths.sorted()
-        perform("添加选中项目", refreshAfterFailure: true) {
+        perform(L10n.text("添加选中项目"), refreshAfterFailure: true) {
             let client = try self.client()
             // SVN 会添加被显式指定的忽略项目；界面旧选择不能绕过当前规则。
             let current = try await client.status(at: copy.root)
             for path in paths {
                 guard current.contains(where: { $0.path == path && $0.item == "unversioned" }) else {
-                    throw SVNError("\(path) 已被忽略或状态已变化，请刷新后重新选择。")
+                    throw SVNError(L10n.text("%@ 已被忽略或状态已变化，请刷新后重新选择。", path))
                 }
             }
             self.result = try await client.add(paths: paths, at: copy.root)
@@ -333,7 +339,7 @@ final class AppModel: ObservableObject {
         guard let copy = workingCopy, canCommit else { return }
         let paths = selectedPaths.sorted()
         let commitMessage = message
-        perform("检查实际提交范围") {
+        perform(L10n.text("检查实际提交范围")) {
             self.commitPlan = try await self.client().prepareCommit(paths: paths, message: commitMessage, at: copy.root)
         }
     }
@@ -342,8 +348,8 @@ final class AppModel: ObservableObject {
         guard !isBusy, commitPlan?.id == plan.id, workingCopy?.root == plan.root else { return }
         commitPlan = nil
         perform(
-            "提交选中项目", refreshAfterFailure: true, streamOutput: true,
-            cancellationMessage: "提交已取消；服务器结果未确认，请先查看仓库历史核实，勿直接重复提交。"
+            L10n.text("提交选中项目"), refreshAfterFailure: true, streamOutput: true,
+            cancellationMessage: L10n.text("提交已取消；服务器结果未确认，请先查看仓库历史核实，勿直接重复提交。")
         ) {
             let client = try self.client()
             try await self.receiveLiveOutput { onOutput in
@@ -355,7 +361,7 @@ final class AppModel: ObservableObject {
             do {
                 try await self.reload()
             } catch {
-                throw SVNError("提交已成功，但重新读取工作副本失败，请勿重复提交。\n\n\(error.localizedDescription)")
+                throw SVNError(L10n.text("提交已成功，但重新读取工作副本失败，请勿重复提交。\n\n%@", error.localizedDescription))
             }
         }
     }
@@ -364,8 +370,8 @@ final class AppModel: ObservableObject {
     func chooseFileOperation(_ operation: FileOperation) {
         guard !isBusy, let copy = workingCopy, let window = mainWindow else { return }
         let panel = NSOpenPanel()
-        panel.title = "选择要\(operation.title)的文件或目录"
-        panel.prompt = "检查项目"
+        panel.title = L10n.text("选择要%@的文件或目录", operation.title)
+        panel.prompt = L10n.text("检查项目")
         panel.canChooseFiles = true
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
@@ -374,7 +380,7 @@ final class AppModel: ObservableObject {
             guard response == .OK, let url = panel.url else { return }
             let prefix = copy.root.path + "/"
             guard self.workingCopy?.root == copy.root, url.path.hasPrefix(prefix) else {
-                self.errorMessage = "请选择当前工作副本内的文件或目录，不能选择根目录。"
+                self.errorMessage = L10n.text("请选择当前工作副本内的文件或目录，不能选择根目录。")
                 return
             }
             self.beginFileOperation(operation, path: String(url.path.dropFirst(prefix.count)))
@@ -391,7 +397,7 @@ final class AppModel: ObservableObject {
     func prepareFileOperation(_ draft: FileOperationDraft, newName: String) {
         guard !isBusy, fileOperationDraft?.id == draft.id, workingCopy?.root == draft.root else { return }
         fileOperationError = nil
-        perform("检查\(draft.operation.title)范围", reportFailure: { self.fileOperationError = $0.localizedDescription }) {
+        perform(L10n.text("检查%@范围", draft.operation.title), reportFailure: { self.fileOperationError = $0.localizedDescription }) {
             self.fileOperationPlan = try await self.client().prepareFileOperation(
                 draft.operation, path: draft.path, newName: newName, at: draft.root
             )
@@ -407,7 +413,7 @@ final class AppModel: ObservableObject {
             do {
                 try await self.reload()
             } catch {
-                throw SVNError("\(plan.operation.title)已完成，但刷新失败，请重新读取状态。\n\(error.localizedDescription)")
+                throw SVNError(L10n.text("%@已完成，但刷新失败，请重新读取状态。\n%@", plan.operation.title, error.localizedDescription))
             }
         }
     }
@@ -416,21 +422,21 @@ final class AppModel: ObservableObject {
     func prepareRevert(paths: [String]? = nil) {
         guard !isBusy, let copy = workingCopy else { return }
         let paths = paths ?? selectedPaths.sorted()
-        perform("检查还原范围") {
+        perform(L10n.text("检查还原范围")) {
             let plan = try await self.client().prepareRevert(paths: paths, at: copy.root)
             try Task.checkCancellation()
             self.revertPlan = plan
-            self.result = "请检查 \(plan.items.count) 项还原内容，确认前不会修改文件。"
+            self.result = L10n.text("请检查 %@ 项还原内容，确认前不会修改文件。", plan.items.count)
         }
     }
 
     func confirmRevert(_ plan: RevertPlan) {
         guard !isBusy, workingCopy?.root == plan.root, revertPlan?.id == plan.id else { return }
         revertPlan = nil
-        perform("还原选中项目", refreshAfterFailure: true) {
+        perform(L10n.text("还原选中项目"), refreshAfterFailure: true) {
             self.result = try await self.client().revert(plan)
             try await self.reload()
-            self.result = "还原完成\n\n" + self.result
+            self.result = L10n.text("还原完成\n\n") + self.result
         }
     }
 
@@ -438,7 +444,7 @@ final class AppModel: ObservableObject {
         guard !isBusy, let copy = workingCopy else { return }
         conflictError = nil
         conflictResolutionPlan = nil
-        perform("读取冲突详情", reportFailure: { error in
+        perform(L10n.text("读取冲突详情"), reportFailure: { error in
             if self.conflictDetails != nil {
                 self.conflictError = error.localizedDescription
             } else {
@@ -459,15 +465,15 @@ final class AppModel: ObservableObject {
         guard !isBusy, externalMergeActivity?.isRunning != true,
               conflictDetails?.id == details.id, workingCopy?.root == details.root else { return }
         conflictError = nil
-        perform("准备外部合并", reportFailure: { self.conflictError = $0.localizedDescription }) {
+        perform(L10n.text("准备外部合并"), reportFailure: { self.conflictError = $0.localizedDescription }) {
             guard let tool = ExternalMergeTool(rawValue: UserDefaults.standard.string(forKey: "externalMergeTool") ?? "") else {
-                throw SVNError("请先在设置的“合并工具”中选择并保存已安装的工具。")
+                throw SVNError(L10n.text("请先在设置的“合并工具”中选择并保存已安装的工具。"))
             }
             let executable = try tool.executableURL(for: UserDefaults.standard.string(forKey: "externalMergeExecutable") ?? "")
             let files = try await self.client().externalMergeFiles(details)
             try Task.checkCancellation()
             let activity = ExternalMergeActivity(root: details.root, path: details.entry.path,
-                message: "已请求打开 \(tool.title)。请在工具内保存并结束本次合并，再检查最终内容。")
+                message: L10n.text("已请求打开 %@。请在工具内保存并结束本次合并，再检查最终内容。", tool.title))
             self.externalMergeActivity = activity
             // This task is deliberately independent of the cancellable SVN operation.
             self.externalMergeTask = Task { @MainActor in
@@ -477,10 +483,10 @@ final class AppModel: ObservableObject {
                         arguments: tool.arguments(for: files), directory: details.root)
                     guard self.externalMergeActivity?.id == activity.id else { return }
                     self.externalMergeActivity?.message = output.exitCode == 0
-                        ? "工具进程已返回，SVN 冲突状态尚未更改。请关闭本次合并窗口，重新读取并检查保存结果。"
-                        : "合并工具退出码 \(output.exitCode)，未标记解决。\n\(output.stderr)\(output.stdout)"
+                        ? L10n.text("工具进程已返回，SVN 冲突状态尚未更改。请关闭本次合并窗口，重新读取并检查保存结果。")
+                        : L10n.text("合并工具退出码 %@，未标记解决。\n%@%@", output.exitCode, output.stderr, output.stdout)
                 } catch {
-                    self.externalMergeActivity?.message = "无法启动合并工具：\(error.localizedDescription)"
+                    self.externalMergeActivity?.message = L10n.text("无法启动合并工具：%@", error.localizedDescription)
                 }
                 self.externalMergeActivity?.isRunning = false
             }
@@ -490,7 +496,7 @@ final class AppModel: ObservableObject {
     func prepareConflictResolution(_ details: ConflictDetails) {
         guard !isBusy, !isExternallyMerging(details), conflictDetails?.id == details.id else { return }
         conflictError = nil
-        perform("检查解决结果", reportFailure: { error in
+        perform(L10n.text("检查解决结果"), reportFailure: { error in
             self.conflictError = error.localizedDescription
         }) {
             self.conflictResolutionPlan = try await self.client().prepareConflictResolution(details)
@@ -504,12 +510,12 @@ final class AppModel: ObservableObject {
               conflictDetails?.id == plan.details.id, workingCopy?.root == plan.details.root else { return }
         conflictResolutionPlan = nil
         conflictDetails = nil
-        perform("标记冲突已解决", refreshAfterFailure: true) {
+        perform(L10n.text("标记冲突已解决"), refreshAfterFailure: true) {
             self.result = try await self.client().resolveConflict(plan)
             do {
                 try await self.reload()
             } catch {
-                throw SVNError("该文件已标记解决，但工作区刷新失败，请重新刷新检查。\n\(error.localizedDescription)")
+                throw SVNError(L10n.text("该文件已标记解决，但工作区刷新失败，请重新刷新检查。\n%@", error.localizedDescription))
             }
         }
     }
@@ -517,7 +523,7 @@ final class AppModel: ObservableObject {
     /// 查看已有规则与快捷添加共用编辑窗口，用户保存前不改变 SVN 属性。
     func editDirectoryIgnores(path: String = ".", adding pattern: String? = nil) {
         guard let copy = workingCopy else { return }
-        perform("读取目录忽略规则") {
+        perform(L10n.text("读取目录忽略规则")) {
             let settings = try await self.client().directoryIgnores(path: path, at: copy.root)
             try Task.checkCancellation()
             var text = settings.patterns ?? ""
@@ -527,7 +533,7 @@ final class AppModel: ObservableObject {
             }
             self.directoryIgnoreError = nil
             self.directoryIgnoreDraft = DirectoryIgnoreDraft(settings: settings, initialPatterns: text)
-            self.result = "已读取目录忽略规则，保存前不会修改属性。"
+            self.result = L10n.text("已读取目录忽略规则，保存前不会修改属性。")
         }
     }
 
@@ -536,7 +542,7 @@ final class AppModel: ObservableObject {
         do {
             let name = (entry.path as NSString).lastPathComponent
             let suffix = (name as NSString).pathExtension
-            guard !byExtension || !suffix.isEmpty else { throw SVNError("该项目没有可忽略的扩展名。") }
+            guard !byExtension || !suffix.isEmpty else { throw SVNError(L10n.text("该项目没有可忽略的扩展名。")) }
             let pattern = byExtension
                 ? "*." + (try SVNConfiguration.literalIgnorePattern(suffix))
                 : try SVNConfiguration.literalIgnorePattern(name)
@@ -561,8 +567,8 @@ final class AppModel: ObservableObject {
     func chooseDirectoryIgnores() {
         guard !isBusy, let copy = workingCopy else { return }
         let panel = NSOpenPanel()
-        panel.title = "选择目录编辑忽略规则"
-        panel.prompt = "编辑忽略"
+        panel.title = L10n.text("选择目录编辑忽略规则")
+        panel.prompt = L10n.text("编辑忽略")
         panel.directoryURL = copy.root
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
@@ -571,7 +577,7 @@ final class AppModel: ObservableObject {
         let root = copy.root.resolvingSymlinksInPath().path
         let selected = url.resolvingSymlinksInPath().path
         guard selected == root || selected.hasPrefix(root + "/") else {
-            errorMessage = "请选择当前工作副本内的受控目录。"
+            errorMessage = L10n.text("请选择当前工作副本内的受控目录。")
             return
         }
         editDirectoryIgnores(path: selected == root ? "." : String(selected.dropFirst(root.count + 1)))
@@ -580,9 +586,9 @@ final class AppModel: ObservableObject {
     func saveDirectoryIgnores(_ draft: DirectoryIgnoreDraft, patterns: String) {
         guard !isBusy, directoryIgnoreDraft?.id == draft.id, workingCopy?.root == draft.settings.root else { return }
         directoryIgnoreError = nil
-        perform("保存目录忽略规则", reportFailure: { error in
+        perform(L10n.text("保存目录忽略规则"), reportFailure: { error in
             let detail = error is CancellationError
-                ? "保存已取消；已经写入的属性不会回滚，请关闭后刷新检查。" : error.localizedDescription
+                ? L10n.text("保存已取消；已经写入的属性不会回滚，请关闭后刷新检查。") : error.localizedDescription
             if self.directoryIgnoreDraft != nil {
                 self.directoryIgnoreError = detail
             } else {
@@ -595,7 +601,7 @@ final class AppModel: ObservableObject {
             do {
                 try await self.reload()
             } catch {
-                throw SVNError("目录忽略已保存，但刷新状态失败，请重新刷新检查。\n\(error.localizedDescription)")
+                throw SVNError(L10n.text("目录忽略已保存，但刷新状态失败，请重新刷新检查。\n%@", error.localizedDescription))
             }
         }
     }
@@ -629,13 +635,13 @@ final class AppModel: ObservableObject {
         selectedDirectories: [String]? = nil
     ) {
         perform(
-            "检出仓库", streamOutput: true,
-            cancellationMessage: "检出已中断，已下载内容保留在：\(destination.path)。请检查目标目录后决定如何继续。"
+            L10n.text("检出仓库"), streamOutput: true,
+            cancellationMessage: L10n.text("检出已中断，已下载内容保留在：%@。请检查目标目录后决定如何继续。", destination.path)
         ) {
             let client = try self.client(for: repository)
             self.checkoutRecovery = nil
             self.checkoutProgress = CheckoutProgress()
-            self.result = "正在连接仓库，检出到：\(destination.path)\n"
+            self.result = L10n.text("正在连接仓库，检出到：%@\n", destination.path)
             // 先消费完输出再发布完成/失败，避免后台回调覆盖终态或下一次操作。
             let stream = CommandOutputStream()
             let reader = Task { @MainActor in
@@ -664,7 +670,7 @@ final class AppModel: ObservableObject {
                 throw error
             }
             self.checkoutProgress?.isOpeningWorkingCopy = true
-            self.operation = "打开检出的工作副本"
+            self.operation = L10n.text("打开检出的工作副本")
             self.writeProgress?.phase = .completed
             self.writeProgress?.finishedAt = Date()
             do {
@@ -675,9 +681,9 @@ final class AppModel: ObservableObject {
                     await self.inspectCheckout(destination: destination, client: client)
                 }
                 await inspection.value
-                throw SVNError("下载已完成，但打开工作副本失败，请检查目录后重新打开。\n\(error.localizedDescription)")
+                throw SVNError(L10n.text("下载已完成，但打开工作副本失败，请检查目录后重新打开。\n%@", error.localizedDescription))
             }
-            self.result = "检出完成，已打开：\(destination.path)\n\n\(self.formatCheckoutOutput(output))"
+            self.result = L10n.text("检出完成，已打开：%@\n\n%@", destination.path, self.formatCheckoutOutput(output))
         }
     }
 
@@ -693,16 +699,16 @@ final class AppModel: ObservableObject {
                 remember(copy.root)
                 rememberRepository(copy.repositoryURL)
             }
-            result += "\n目录检查：\(inspection.summary)\n\(inspection.guidance)\n"
+            result += L10n.text("\n目录检查：%@\n%@\n", inspection.summary, inspection.guidance)
         } catch {
             checkoutRecovery?.error = error.localizedDescription
-            result += "\n目录检查失败：\(error.localizedDescription)\n"
+            result += L10n.text("\n目录检查失败：%@\n", error.localizedDescription)
         }
     }
 
     func recheckCheckout() {
         guard let recovery = checkoutRecovery else { return }
-        perform("检查检出目录") {
+        perform(L10n.text("检查检出目录")) {
             await self.inspectCheckout(destination: recovery.destination, client: try self.client())
         }
     }
@@ -717,13 +723,13 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// 将检出的新增通知显示为中文，保留其他输出和换行，避免改写错误信息。
+    /// 将检出的新增通知按界面语言显示，保留其他输出和换行，避免改写错误信息。
     private func formatCheckoutOutput(_ text: String) -> String {
         text.components(separatedBy: "\n").map { line in
             guard line.hasPrefix("A    ") else {
                 return line
             }
-            return "已检出：\(line.dropFirst(5))"
+            return L10n.text("已检出：%@", line.dropFirst(5))
         }.joined(separator: "\n")
     }
 
@@ -773,10 +779,10 @@ final class AppModel: ObservableObject {
         isLoadingMoreHistory = append
         historyPageError = nil
         historyPageRequiresAuthentication = false
-        perform(append ? "读取更早历史" : "读取最近 50 条历史", reportFailure: { error in
+        perform(append ? L10n.text("读取更早历史") : L10n.text("读取最近 50 条历史"), reportFailure: { error in
             self.isLoadingMoreHistory = false
             let svnError = error as? SVNError
-            let message = error is CancellationError ? "历史读取已取消，可重新加载。" : error.localizedDescription
+            let message = error is CancellationError ? L10n.text("历史读取已取消，可重新加载。") : error.localizedDescription
             if append {
                 self.historyPageError = message
                 self.historyPageRequiresAuthentication = svnError?.requiresAuthentication == true
@@ -801,7 +807,7 @@ final class AppModel: ObservableObject {
             self.reconcileHistorySelection()
             self.historyState = .loaded
             self.isLoadingMoreHistory = false
-            self.result = "已读取 \(self.logs.count) 条历史记录"
+            self.result = L10n.text("已读取 %@ 条历史记录", self.logs.count)
         }
     }
 
@@ -817,9 +823,9 @@ final class AppModel: ObservableObject {
     func chooseFileHistory() {
         guard !isBusy, let copy = workingCopy else { return }
         let panel = NSOpenPanel()
-        panel.title = "选择文件查看历史"
-        panel.prompt = "查看历史"
-        panel.message = "选择当前工作副本内已提交的文件；历史查询不会修改本地内容。"
+        panel.title = L10n.text("选择文件查看历史")
+        panel.prompt = L10n.text("查看历史")
+        panel.message = L10n.text("选择当前工作副本内已提交的文件；历史查询不会修改本地内容。")
         panel.directoryURL = copy.root
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
@@ -829,7 +835,7 @@ final class AppModel: ObservableObject {
         let file = url.deletingLastPathComponent().resolvingSymlinksInPath()
             .appendingPathComponent(url.lastPathComponent).path
         guard file.hasPrefix(root) else {
-            errorMessage = "请选择当前工作副本内的文件。"
+            errorMessage = L10n.text("请选择当前工作副本内的文件。")
             return
         }
         loadHistory(path: String(file.dropFirst(root.count)))
@@ -852,22 +858,22 @@ final class AppModel: ObservableObject {
         diffTask?.cancel()
         guard let path = focusedPath, let copy = workingCopy,
               let entry = entries.first(where: { $0.path == path }) else {
-            diffText = "选择一个文件查看差异"
+            diffText = L10n.text("选择一个文件查看差异")
             return
         }
         if entry.item == "unversioned" {
-            diffText = "此项目存在于本地，但尚未纳入 SVN 版本控制，没有可比较的仓库基准版本。\n\n需要提交时，先勾选并点击“添加到 SVN”；添加只安排版本控制，提交后才会上传。添加目录不会自动添加子文件。\n\n不需要提交的本地文件可以保留原状。"
+            diffText = L10n.text("此项目存在于本地，但尚未纳入 SVN 版本控制，没有可比较的仓库基准版本。\n\n需要提交时，先勾选并点击“添加到 SVN”；添加只安排版本控制，提交后才会上传。添加目录不会自动添加子文件。\n\n不需要提交的本地文件可以保留原状。")
             return
         }
         if entry.item == "ignored" {
-            diffText = "此项目匹配 SVN 忽略规则，未纳入版本控制，不会列入添加或提交候选。\n\n规则可能来自本应用的全局忽略设置、系统 SVN 配置或目录忽略属性。需要添加时，请先调整对应规则并刷新。已受版本控制的文件不受忽略规则影响。"
+            diffText = L10n.text("此项目匹配 SVN 忽略规则，未纳入版本控制，不会列入添加或提交候选。\n\n规则可能来自本应用的全局忽略设置、系统 SVN 配置或目录忽略属性。需要添加时，请先调整对应规则并刷新。已受版本控制的文件不受忽略规则影响。")
             return
         }
         if ["external", "missing", "obstructed", "incomplete"].contains(entry.item) {
-            diffText = "\(entry.label)：\(path)\n\n当前状态无法展示文本差异，请先检查工作副本；外部工作副本需单独打开。"
+            diffText = L10n.text("%@：%@\n\n当前状态无法展示文本差异，请先检查工作副本；外部工作副本需单独打开。", entry.label, path)
             return
         }
-        diffText = "正在读取差异…"
+        diffText = L10n.text("正在读取差异…")
         diffTask = Task {
             do {
                 let text = try await client().diff(path: path, at: copy.root)
@@ -885,7 +891,7 @@ final class AppModel: ObservableObject {
     /// 配置保存后统一用于所有新命令，并刷新状态以清除已经被忽略的旧选择。
     func saveSettings(executablePath: String, globalIgnores: String?) throws {
         guard !isBusy else {
-            throw SVNError("请等待当前操作完成后再保存设置。")
+            throw SVNError(L10n.text("请等待当前操作完成后再保存设置。"))
         }
         let executable = try SVNConfiguration.executableURL(for: executablePath)
         let patterns = try globalIgnores.map(SVNConfiguration.normalizeIgnorePatterns)
@@ -927,7 +933,7 @@ final class AppModel: ObservableObject {
         entries = []
         selectedPaths = []
         focusedPath = nil
-        diffText = "选择一个文件查看差异"
+        diffText = L10n.text("选择一个文件查看差异")
         resetHistory()
         message = ""
         fileFilter = ""
@@ -945,7 +951,7 @@ final class AppModel: ObservableObject {
         conflictResolutionPlan = nil
         conflictError = nil
         writeProgress = nil
-        result = "欢迎使用 Mac SVN"
+        result = L10n.text("欢迎使用 Mac SVN")
     }
 
     /// 记录成功访问的仓库地址，最近使用的排在前面；与登录密码分开持久化。
@@ -996,7 +1002,7 @@ final class AppModel: ObservableObject {
         operation = title
         writeProgress = streamOutput ? WriteOperationProgress(title: title) : nil
         if streamOutput {
-            result = "\(title)进行中…\n"
+            result = L10n.text("%@进行中…\n", title)
         }
         operationTask = Task {
             defer {
@@ -1009,7 +1015,7 @@ final class AppModel: ObservableObject {
                 if streamOutput {
                     writeProgress?.phase = .completed
                     writeProgress?.finishedAt = Date()
-                    result = "\(title)完成\n\n" + result
+                    result = L10n.text("%@完成\n\n", title) + result
                 }
             } catch {
                 if let reportFailure {
@@ -1018,10 +1024,10 @@ final class AppModel: ObservableObject {
                 }
                 let cancelled = error is CancellationError || Task.isCancelled
                 var detail = cancelled
-                    ? cancellationMessage ?? "操作已中断；已产生的本地变更不会自动撤销。请刷新状态后检查。"
+                    ? cancellationMessage ?? L10n.text("操作已中断；已产生的本地变更不会自动撤销。请刷新状态后检查。")
                     : error.localizedDescription
                 if streamOutput, writeProgress?.phase == .completed {
-                    detail = cancelled ? "\(title)已完成，但状态刷新已取消；请刷新检查，不要重复执行。" : error.localizedDescription
+                    detail = cancelled ? L10n.text("%@已完成，但状态刷新已取消；请刷新检查，不要重复执行。", title) : error.localizedDescription
                 }
                 if refreshAfterFailure {
                     // A new task is needed because the interrupted operation's task is cancelled.
@@ -1029,7 +1035,7 @@ final class AppModel: ObservableObject {
                     do {
                         try await refresh.value
                     } catch {
-                        detail += "\n\n重新读取状态失败：\(error.localizedDescription)"
+                        detail += L10n.text("\n\n重新读取状态失败：%@", error.localizedDescription)
                     }
                 }
                 errorMessage = detail
@@ -1038,7 +1044,7 @@ final class AppModel: ObservableObject {
                         ? .completedWithWarning : (cancelled ? .cancelled : .failed)
                     writeProgress?.phase = phase
                     writeProgress?.finishedAt = Date()
-                    result = "\(title)：\(phase.rawValue)\n\n" + result + "\n\n" + detail
+                    result = "\(title)：\(phase.title)\n\n" + result + "\n\n" + detail
                 } else {
                     result = detail
                 }
