@@ -61,11 +61,11 @@ extension SVNClient {
             var directory = isDirectory.boolValue ? url : url.deletingLastPathComponent()
             // Unversioned descendants still belong to their nearest working copy.
             while !FileManager.default.fileExists(atPath: directory.appendingPathComponent(".svn").path) {
-                let parent = directory.deletingLastPathComponent()
-                guard parent != directory else {
+                // URL identity at the filesystem root differs between Foundation versions.
+                guard directory.path != "/" else {
                     throw SVNError(L10n.text("所选路径不在 SVN 工作副本中：%@", path))
                 }
-                directory = parent
+                directory = directory.deletingLastPathComponent().standardizedFileURL
             }
             let root = directory.resolvingSymlinksInPath().standardizedFileURL
             // Preserve the final component: SVN can version symbolic links themselves.
