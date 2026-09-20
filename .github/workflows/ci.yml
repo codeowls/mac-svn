@@ -34,6 +34,9 @@ jobs:
           svnadmin --version --quiet
 
       - name: Test Finder requests and isolated SVN workflows
+        timeout-minutes: 5
+        env:
+          NSUnbufferedIO: "YES"
         run: bash scripts/test.sh
 
       - name: Build app and verify local signature

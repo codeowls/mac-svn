@@ -48,11 +48,11 @@ struct FinderSelectionTests {
             .appendingPathComponent("mac-svn-finder-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: fixture, withIntermediateDirectories: true)
         let repository = fixture.appendingPathComponent("repository")
-        try run(svnadmin, ["create", repository.path])
+        try await run(svnadmin, ["create", repository.path])
         let first = fixture.appendingPathComponent("中文 空格@副本")
         let second = fixture.appendingPathComponent("second")
-        try run(svn, ["checkout", repository.absoluteString, first.path])
-        try run(svn, ["checkout", repository.absoluteString, second.path])
+        try await run(svn, ["checkout", repository.absoluteString, first.path])
+        try await run(svn, ["checkout", repository.absoluteString, second.path])
         let child = first.appendingPathComponent("untracked/文件 @.txt")
         try FileManager.default.createDirectory(at: child.deletingLastPathComponent(), withIntermediateDirectories: true)
         try Data("fixture".utf8).write(to: child)
@@ -81,15 +81,15 @@ struct FinderSelectionTests {
             .appendingPathComponent("mac-svn-finder-history-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: fixture, withIntermediateDirectories: true)
         let repository = fixture.appendingPathComponent("repository")
-        try run(svn.deletingLastPathComponent().appendingPathComponent("svnadmin"), ["create", repository.path])
+        try await run(svn.deletingLastPathComponent().appendingPathComponent("svnadmin"), ["create", repository.path])
         let copy = fixture.appendingPathComponent("working-copy")
-        try run(svn, ["checkout", repository.absoluteString, copy.path])
+        try await run(svn, ["checkout", repository.absoluteString, copy.path])
         let selected = copy.appendingPathComponent("selected@.txt")
         let other = copy.appendingPathComponent("other.txt")
         try Data("initial\n".utf8).write(to: selected)
         try Data("other\n".utf8).write(to: other)
-        try run(svn, ["add", "--", selected.path + "@", other.path + "@"])
-        try run(svn, ["commit", "-m", "Initial fixture", "--", copy.path + "@"])
+        try await run(svn, ["add", "--", selected.path + "@", other.path + "@"])
+        try await run(svn, ["commit", "-m", "Initial fixture", "--", copy.path + "@"])
         try Data("selected change\n".utf8).write(to: selected)
         try Data("unselected change\n".utf8).write(to: other)
         let client = SVNClient(executable: svn)
@@ -106,7 +106,7 @@ struct FinderSelectionTests {
         // Create enough real revisions to exercise the same cursor used by the Finder history form.
         for revision in 3...53 {
             try Data("revision \(revision)\n".utf8).write(to: selected)
-            try run(svn, ["commit", "-m", "History fixture \(revision)", "--", selected.path + "@"])
+            try await run(svn, ["commit", "-m", "History fixture \(revision)", "--", selected.path + "@"])
         }
         let first = try await client.historyPage(at: copy, path: "selected@.txt")
         #expect(first.entries.count == 50)
@@ -130,12 +130,9 @@ struct FinderSelectionTests {
         return try FinderRequest(url: #require(value.url))
     }
 
-    private func run(_ executable: URL, _ arguments: [String]) throws {
-        let process = Process()
-        process.executableURL = executable
-        process.arguments = arguments
-        try process.run()
-        process.waitUntilExit()
-        #expect(process.terminationStatus == 0)
+    /// Keep blocking process waits off Swift Testing's cooperative executor.
+    private func run(_ executable: URL, _ arguments: [String]) async throws {
+        let output = try await ProcessRunner.run(executable: executable, arguments: arguments)
+        try #require(output.exitCode == 0, "\(output.stderr)")
     }
 }
