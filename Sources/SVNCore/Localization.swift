@@ -29,9 +29,19 @@ public enum L10n {
         rawValue: UserDefaults.standard.string(forKey: AppLanguage.preferenceKey) ?? "zh-Hans"
     ) ?? .chinese
 
-    private static let bundle = Bundle(
-        path: Bundle.module.path(forResource: language.rawValue, ofType: "lproj")!
-    )!
+    private static let bundle = resourceBundle(for: language)
+
+    /// SwiftPM may lowercase localization directories; use the bundle's actual identifier.
+    static func resourceBundle(for language: AppLanguage) -> Bundle {
+        guard let identifier = Bundle.module.localizations.first(where: {
+            $0.caseInsensitiveCompare(language.rawValue) == .orderedSame
+        }),
+        let path = Bundle.module.path(forResource: identifier, ofType: "lproj"),
+        let bundle = Bundle(path: path) else {
+            preconditionFailure("Missing localization resources for \(language.rawValue)")
+        }
+        return bundle
+    }
 
     /// Translate before substituting values, keeping paths, diagnostics and user text verbatim.
     public static func text(_ key: String, _ arguments: Any...) -> String {
