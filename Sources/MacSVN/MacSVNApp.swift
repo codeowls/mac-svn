@@ -2,8 +2,20 @@ import SVNCore
 import AppKit
 import SwiftUI
 
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
+    @Published var finderRequests: [FinderInboxItem] = []
+
+    /// URL messages only enqueue forms; writes require an explicit confirmation in the host.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        if urls.contains(where: { $0.scheme == "macsvn" }) {
+            finderRequests.append(contentsOf: urls.map(FinderInboxItem.init))
+            application.activate(ignoringOtherApps: true)
+            return
+        }
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
+        _ = FinderIntegration.shared
         NSApplication.shared.setActivationPolicy(.regular)
         // Reload the bundled artwork so an in-place rebuild also updates the running Dock tile.
         if let iconURL = Bundle.main.url(forResource: "AppIcon", withExtension: "icns"),
@@ -42,6 +54,7 @@ struct MacSVNApp: App {
                 .environment(\.locale, L10n.language.locale)
                 .frame(minWidth: 1000, minHeight: 680)
                 .preferredColorScheme(preferredColorScheme)
+                .modifier(FinderInboxPresenter(delegate: delegate, model: model))
         }
         .defaultSize(width: 1250, height: 800)
         .commands {

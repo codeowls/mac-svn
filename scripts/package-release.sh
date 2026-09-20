@@ -2,6 +2,10 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
+if [[ -d "$PWD/dist/Mac SVN.app/Contents/PlugIns/MacSVNFinderSync.appex" ]]; then
+    printf 'The app contains a local Finder probe. Remove the probe before packaging a release.\n' >&2
+    exit 1
+fi
 APP_VERSION="$(cat VERSION)"
 if [[ ! "$APP_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
     printf 'Invalid VERSION: %s\n' "$APP_VERSION" >&2
@@ -18,6 +22,7 @@ APP_DIR="$PWD/dist/Mac SVN.app"
 codesign --verify --deep --strict "$APP_DIR"
 for architecture in arm64 x86_64; do
     lipo "$APP_DIR/Contents/MacOS/MacSVN" -verify_arch "$architecture"
+    lipo "$APP_DIR/Contents/PlugIns/MacSVNFinder.appex/Contents/MacOS/MacSVNFinder" -verify_arch "$architecture"
 done
 test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_DIR/Contents/Info.plist")" = "$APP_VERSION"
 

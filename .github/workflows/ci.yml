@@ -33,6 +33,9 @@ jobs:
           svn --version --quiet
           svnadmin --version --quiet
 
+      - name: Test Finder requests and isolated SVN workflows
+        run: bash scripts/test.sh
+
       - name: Build app and verify local signature
         run: |
           bash scripts/build-app.sh

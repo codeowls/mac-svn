@@ -178,6 +178,20 @@ final class AppModel: ObservableObject {
         rememberRepository(location.url)
     }
 
+    /// Finder and the main workspace share one operation slot and repository credentials.
+    func performFinderOperation(_ action: @MainActor () async throws -> Void) async throws {
+        guard !isBusy else { throw SVNError(L10n.text("请等待当前操作完成。")) }
+        operation = L10n.text("访达操作")
+        defer { operation = "" }
+        try await action()
+    }
+
+    /// Refresh the visible copy after Finder writes without changing its draft or switching repositories.
+    func refreshAfterFinderWrite(at root: URL) async throws {
+        guard workingCopy?.root.resolvingSymlinksInPath() == root.resolvingSymlinksInPath() else { return }
+        try await reload()
+    }
+
     func chooseWorkingCopy() {
         guard let window = mainWindow else {
             errorMessage = L10n.text("未能定位主窗口，请重新打开应用后再选择工作副本。")

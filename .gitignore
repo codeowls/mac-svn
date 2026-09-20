@@ -19,6 +19,7 @@ xcuserdata/
 *.md
 !/README.md
 !/assets/README.md
+!/docs/FINDER.md
 /assets/AppIcon.prompt.txt
 
 # Local credentials and signing material

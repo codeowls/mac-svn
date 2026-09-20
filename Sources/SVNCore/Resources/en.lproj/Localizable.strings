@@ -590,3 +590,40 @@
 "语言" = "Language";
 "语言选择自动保存，重新打开 Mac SVN 后生效。" = "Your language choice is saved automatically and takes effect when you reopen Mac SVN.";
 "语言已保存，请退出并重新打开应用。" = "Language saved. Quit and reopen the app to apply it.";
+
+/* Finder operation requests */
+"无效的访达操作请求。" = "Invalid Finder operation request.";
+"访达请求必须包含绝对路径。" = "Finder requests must contain absolute paths.";
+"访达所选路径已不存在：%@" = "The Finder selection no longer exists: %@";
+"所选路径不在 SVN 工作副本中：%@" = "The selected path is not in an SVN working copy: %@";
+"所选路径超出工作副本范围：%@" = "The selected path is outside the working copy: %@";
+"所选项目属于多个工作副本，请分别操作。" = "The selected items belong to multiple working copies. Handle them separately.";
+"工作副本位置已变化，请重新从访达选择。" = "The working copy location has changed. Select the items in Finder again.";
+
+/* Finder operation form */
+"访达操作" = "Finder Operations";
+"将更新整个工作副本，包含未在访达中选中的项目。" = "This updates the entire working copy, including items not selected in Finder.";
+"确认更新整个工作副本" = "Confirm Update of Entire Working Copy";
+"请只选择一个项目查看差异或历史。" = "Select one item to view its diff or history.";
+"更新产生冲突，请在主工作区查看并处理。" = "The update produced conflicts. Review and resolve them in the main workspace.";
+"操作已取消；写操作结果可能已生效，请核对状态和历史后再重试。" = "Operation cancelled. Writes may already have taken effect; check status and history before retrying.";
+
+/* Finder integration settings */
+"访达" = "Finder";
+"访达集成" = "Finder Integration";
+"访达扩展已启用" = "Finder extension is enabled";
+"请在系统设置中启用 Mac SVN 访达扩展。" = "Enable the Mac SVN Finder extension in System Settings.";
+"管理访达扩展" = "Manage Finder Extensions";
+"检查并同步" = "Check and Sync";
+"扩展已接收目录配置" = "The extension received the directory configuration";
+"等待扩展接收配置；启用后可再次同步。" = "Waiting for the extension. Sync again after enabling it.";
+"停用" = "Disable";
+"添加当前工作副本" = "Add Current Working Copy";
+"仅在上述工作副本中显示菜单；停用不会删除本地文件。" = "Menus appear only in these working copies. Disabling does not delete local files.";
+"此工作副本尚未启用访达集成，请先在设置中添加。" = "Finder integration is not enabled for this working copy. Add it in Settings first.";
+"访达：提交所选项目" = "Finder: Commit Selected Items";
+"访达：更新整个工作副本" = "Finder: Update Entire Working Copy";
+"访达：查看差异" = "Finder: Show Diff";
+"访达：查看历史" = "Finder: Show History";
+"访达：打开工作副本" = "Finder: Open Working Copy";
+"重新读取状态失败：%@" = "Could not refresh status: %@";

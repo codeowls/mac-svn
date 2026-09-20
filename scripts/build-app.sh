@@ -65,11 +65,19 @@ cat > "$APP_DIR/Contents/Info.plist" <<PLIST
     <key>CFBundleShortVersionString</key><string>$APP_VERSION</string>
     <key>CFBundleVersion</key><string>$APP_VERSION</string>
     <key>LSMinimumSystemVersion</key><string>14.0</string>
+    <key>CFBundleURLTypes</key>
+    <array><dict>
+        <key>CFBundleURLName</key><string>io.github.codeowls.mac-svn.finder</string>
+        <key>CFBundleURLSchemes</key><array><string>macsvn</string></array>
+        <key>CFBundleTypeRole</key><string>Viewer</string>
+    </dict></array>
     <key>NSHighResolutionCapable</key><true/>
 </dict>
 </plist>
 PLIST
+bash scripts/build-finder-extension.sh "${ARCHITECTURES[@]}"
 codesign --force --sign - "$APP_DIR"
+codesign --verify --deep --strict "$APP_DIR"
 # Refresh only this app's Launch Services registration after an in-place rebuild.
 touch "$APP_DIR"
 /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$APP_DIR"

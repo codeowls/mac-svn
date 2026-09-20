@@ -22,6 +22,7 @@ struct SettingsView: View {
                 Text("SVN").tag("engine")
                 Text(L10n.text("忽略")).tag("ignores")
                 Text(L10n.text("合并工具")).tag("merge")
+                Text(L10n.text("访达")).tag("finder")
             }
             .pickerStyle(.segmented)
             .frame(width: 460)
@@ -31,6 +32,8 @@ struct SettingsView: View {
                     generalSettings
                 } else if tab == "engine" {
                     engineSettings
+                } else if tab == "finder" {
+                    FinderIntegrationSettings(model: model)
                 } else if tab == "merge" {
                     MergeToolSettingsView()
                 } else {

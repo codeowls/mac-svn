@@ -1,0 +1,21 @@
+Mac SVN 1.3.0
+
+- 新增访达扩展：右键打开工作副本、提交所选项目、确认更新整个工作副本、查看差异和历史。
+- 设置新增访达目录管理，支持单独启用、停用及配置同步；主应用关闭时仍可通过菜单唤起。
+- 访达操作独立保留表单状态，连续请求排队，避免覆盖主工作区草稿；提交前检查并确认实际范围。
+- 设置支持简体中文和英文，重启应用后生效，访达菜单同步语言。
+- 包含自 1.2.0 以来的工作副本右键操作和检出恢复改进。
+
+启用：打开工作副本，进入“设置 → 访达”，在系统中启用扩展，再添加当前工作副本。
+
+要求 macOS 14+ 和本机 Subversion 1.14+；安装包包含 Apple Silicon / Intel 架构。
+本版仍采用 ad-hoc 签名，未进行 Developer ID 签名或 Apple 公证。访达扩展已在本机验证，跨设备及 Intel 实机兼容性尚未验证；暂不提供文件状态角标。
+
+English
+- Finder menus for opening working copies, selected commits, confirmed whole-working-copy updates, diffs, and history.
+- Per-working-copy registration and persistent configuration, with queued requests and separate operation forms that preserve workspace drafts.
+- Simplified Chinese and English settings, applied after restart and synchronized with Finder menus.
+- Includes working-copy context-menu and checkout-recovery improvements since 1.2.0.
+
+Enable the extension through Settings → Finder, then add the current working copy.
+Requires macOS 14+ and Subversion 1.14+. Universal Apple Silicon / Intel package. Ad-hoc signed, without Developer ID signing or Apple notarization. Cross-device and Intel hardware validation remain pending; file status badges are not included.

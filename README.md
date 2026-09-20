@@ -8,9 +8,9 @@ A native macOS Subversion client built with SwiftUI. Review changes, browse hist
 
 ## 界面预览 / Screenshots
 
-以下为原应用的真实截图，仅使用本地演示仓库和 `demo` 作者；侧栏仅展示演示工作副本，未展示业务地址、账号或个人目录。应用界面目前为简体中文。
+以下为原应用的真实截图，仅使用本地演示仓库和 `demo` 作者；侧栏仅展示演示工作副本，未展示业务地址、账号或个人目录。应用支持简体中文和英文，可在设置中切换，重启后生效。
 
-Real screenshots of the app using a local demo repository and the author `demo`. The sidebar shows only the demo working copy; no business server addresses, accounts, or personal directories are shown. The app UI is currently in Simplified Chinese.
+Real screenshots of the app using a local demo repository and the author `demo`. The sidebar shows only the demo working copy; no business server addresses, accounts, or personal directories are shown. The app supports Simplified Chinese and English; change the language in Settings and restart.
 
 ### 欢迎页 / Welcome
 
@@ -30,15 +30,15 @@ Real screenshots of the app using a local demo repository and the author `demo`.
 
 ## 简体中文
 
-当前版本为 **1.2.0**，面向日常 SVN 工作副本管理。源码采用 MIT 协议；应用尚未完成正式签名、公证和跨设备兼容性验证。
+当前版本为 **1.3.0**，面向日常 SVN 工作副本管理。源码采用 MIT 协议；应用尚未完成正式签名、公证和跨设备兼容性验证。
 
 ## 下载与安装
 
-前往 [GitHub Releases](https://github.com/codeowls/mac-svn/releases/latest) 下载，或直接选择 **1.2.0** 安装包：
+前往 [GitHub Releases](https://github.com/codeowls/mac-svn/releases/latest) 下载，或直接选择 **1.3.0** 安装包：
 
-- [DMG 安装包（推荐）](https://github.com/codeowls/mac-svn/releases/download/v1.2.0/Mac-SVN-1.2.0-universal.dmg)：打开后将 **Mac SVN.app** 拖入 **Applications（应用程序）**。
+- [DMG 安装包（推荐）](https://github.com/codeowls/mac-svn/releases/download/v1.3.0/Mac-SVN-1.3.0-universal.dmg)：打开后将 **Mac SVN.app** 拖入 **Applications（应用程序）**。
 
-安装包要求 **macOS 14+**，同时包含 **Apple Silicon / Intel** 架构，无需安装 Swift 或 Xcode。已在 Apple Silicon 验收；Intel 已完成构建，尚未进行 Intel 实机验收。App 仍需本机 **Subversion 1.14+**；已安装 Homebrew 时运行 `brew install subversion`，启动后可在设置中检测或指定 SVN 路径。应用界面目前为简体中文。
+安装包要求 **macOS 14+**，同时包含 **Apple Silicon / Intel** 架构，无需安装 Swift 或 Xcode。已在 Apple Silicon 验收；Intel 已完成构建，尚未进行 Intel 实机验收。App 仍需本机 **Subversion 1.14+**；已安装 Homebrew 时运行 `brew install subversion`，启动后可在设置中检测或指定 SVN 路径。应用支持简体中文和英文，可在设置中切换，重启后生效。
 
 **签名说明：**本版为 ad-hoc 签名，尚无 Developer ID 签名和 Apple 公证，macOS 可能阻止首次打开。请先核对下载来源，再参考 [Apple 官方打开指引](https://support.apple.com/102445)。无需关闭系统 Gatekeeper。
 
@@ -66,13 +66,17 @@ open "dist/Mac SVN.app"
 
 构建脚本默认将 SwiftPM 并行任务数和编译器线程数均设为 2，以降低本机负载；这不是严格的 CPU 占用上限。可用 `SWIFT_BUILD_JOBS=1 bash scripts/build-app.sh` 进一步降低并发，或按需增加该正整数。通用包的两个架构依次构建，`package-release.sh` 也沿用此设置。正式安装包可由下述 GitHub Actions 发布流程构建，无需在本机重复打包。
 
-运行 `bash scripts/package-release.sh` 生成通用架构 DMG 和本地 SHA256 校验文件，输出到 `dist/releases/1.2.0/`；已有同版本输出时拒绝覆盖。维护者更新 `VERSION` 及 `release-notes/<版本>.txt` 后推送对应 `v<版本>` 标签，发布工作流会校验标签、构建验证安装包、上传附件后公开 Release。
+运行 `bash scripts/package-release.sh` 生成通用架构 DMG 和本地 SHA256 校验文件，输出到 `dist/releases/1.3.0/`；已有同版本输出时拒绝覆盖。维护者更新 `VERSION` 及 `release-notes/<版本>.txt` 后推送对应 `v<版本>` 标签，发布工作流会校验标签、构建验证安装包、上传附件后公开 Release。
 
 打包时自动生成并嵌入原生 App 图标；源图和图标说明位于 [`assets/`](assets/README.md)。通过打包后的 `.app` 启动可使用该图标。打包脚本会刷新该 App 的 Launch Services 注册，启动时重新载入 Dock 图标；重建后请退出旧进程再打开 `dist/Mac SVN.app`。`swift run` 是裸可执行文件调试入口，不包含 `.app` 的图标和语言声明。
 
 打包的 App 已声明简体中文，系统文件选择器会使用中文侧栏和按钮，不修改系统语言偏好。
 
 工具栏和分栏使用系统原生外观。要采用 Liquid Glass，请使用包含 macOS 26 或更新 SDK 的工具链打包，并在 macOS 26 或更新系统运行；最低运行要求仍为 macOS 14。打包脚本会将实际 SDK 版本写入链接信息，避免被误标为最低系统版本。当前 CI 使用 Xcode 16.4，仅验证原有系统兼容构建，不代表 Liquid Glass 外观验收。
+
+## 访达集成
+
+1.3.0 安装包包含访达扩展，可从右键菜单提交所选项目、确认更新整个工作副本、查看差异和历史。请在“设置 → 访达”启用扩展并添加当前工作副本。详见[启用步骤与操作范围](docs/FINDER.md)。
 
 ## 当前功能
 
@@ -144,7 +148,7 @@ bash scripts/create-demo.sh
 - 私有仓库可直接通过“仓库账号”登录，支持 `http://`、`https://` 和 `svn://`。登录仅验证读取权限，写权限由提交时的服务器授权检查决定；失败不会自动重试提交。`file://` 不需要登录，`svn+ssh://` 继续使用系统 SSH 认证。
 - App 中输入的密码仅保留在本次会话，按验证成功的仓库根路径隔离；关闭 App 后需重新登录。密码通过标准输入传递，不放入进程参数、不写入 UserDefaults 或 SVN 认证缓存。未在 App 登录的仓库仍使用本机 SVN 已配置的认证缓存、代理和证书。
 - 所有命令使用 `--non-interactive`，不静默信任证书；URL 不允许包含密码。显式登录使用 SVN 1.14+ 的 `--password-from-stdin`。
-- 尚未内置 SVN 引擎、Finder 扩展、三方合并编辑器、稀疏检出设置或文件锁管理。
+- 尚未内置 SVN 引擎、文件状态角标、三方合并编辑器或文件锁管理。
 - 检出、状态扫描和更新使用 `--ignore-externals`；外部工作副本需单独打开管理。
 - 还原暂不支持冲突、移动两端，以及删除／缺失／替换／带历史复制的目录。目录属性只还原自身，不递归处理子项；普通新增目录必须同时选中其已受控子项。
 - 同一窗口内写操作串行执行；不要与终端或其他客户端同时修改同一个工作副本。
@@ -158,7 +162,7 @@ bash scripts/create-demo.sh
 swift build
 ```
 
-CI 配置位于 `.github/workflows/ci.yml`，在 macOS 15 / Xcode 16.4 上安装 SVN，运行 Release 打包和本地签名检查。每次推送及 Pull Request 的检查结果见 GitHub Actions，日常 CI 不发布版本；`.github/workflows/release.yml` 仅在版本标签推送时生成并发布安装包。当前仓库不包含自动测试。
+CI 配置位于 `.github/workflows/ci.yml`，在 macOS 15 / Xcode 16.4 上安装 SVN，运行 Release 打包和本地签名检查。每次推送及 Pull Request 的检查结果见 GitHub Actions，日常 CI 不发布版本；`.github/workflows/release.yml` 仅在版本标签推送时生成并发布安装包。自动测试覆盖访达请求校验、目录配置、真实隔离仓库的选择提交和历史分页，可运行 `bash scripts/test.sh`。
 
 ## 代码结构
 
@@ -176,13 +180,13 @@ scripts/build-app.sh  本地 .app 打包
 
 ## English
 
-**Version 1.2.0.** Mac SVN is a native SwiftUI client for everyday Subversion work. Source code is available under the MIT License. The app has not yet completed release signing, notarization, or cross-device compatibility validation.
+**Version 1.3.0.** Mac SVN is a native SwiftUI client for everyday Subversion work. Source code is available under the MIT License. The app has not yet completed release signing, notarization, or cross-device compatibility validation.
 
 ### Download and install
 
-Visit [GitHub Releases](https://github.com/codeowls/mac-svn/releases/latest), or download **1.2.0** directly:
+Visit [GitHub Releases](https://github.com/codeowls/mac-svn/releases/latest), or download **1.3.0** directly:
 
-- [DMG installer (recommended)](https://github.com/codeowls/mac-svn/releases/download/v1.2.0/Mac-SVN-1.2.0-universal.dmg): open it and drag **Mac SVN.app** into **Applications**.
+- [DMG installer (recommended)](https://github.com/codeowls/mac-svn/releases/download/v1.3.0/Mac-SVN-1.3.0-universal.dmg): open it and drag **Mac SVN.app** into **Applications**.
 
 Requires **macOS 14+** and local **Subversion 1.14+**. Both **Apple Silicon and Intel** architectures are included; Swift/Xcode is not required. Apple Silicon runtime checks passed; Intel is built but has not been tested on physical Intel hardware. With Homebrew already installed, run `brew install subversion`; the SVN path can be selected in app Settings. The app interface is Simplified Chinese.
 
@@ -193,7 +197,7 @@ Requires **macOS 14+** and local **Subversion 1.14+**. Both **Apple Silicon and 
 - macOS 14 or later; developed and verified on Apple Silicon.
 - Swift 6+ with a compatible Xcode or Command Line Tools installation.
 - Subversion 1.14+ installed locally. `svnadmin` is also needed to create the optional demo repository.
-- The application interface is currently in Simplified Chinese; this README is bilingual.
+- The application supports Simplified Chinese and English. Choose a language in Settings and restart.
 
 ```bash
 brew install subversion
@@ -213,9 +217,13 @@ The script builds for the local architecture, embeds the app icon and language d
 
 Build scripts default to 2 SwiftPM jobs and 2 compiler threads to reduce local load; this is not a strict CPU usage cap. Use `SWIFT_BUILD_JOBS=1 bash scripts/build-app.sh` to reduce concurrency further, or choose another positive integer. Universal builds process architectures sequentially, and `package-release.sh` inherits the same setting. The GitHub Actions release workflow can build distribution packages without repeating that work locally.
 
-Use `bash scripts/build-app.sh --universal` for both architectures, or `bash scripts/package-release.sh` to produce DMG and local checksums in `dist/releases/1.2.0/`. Existing release output is not overwritten. The version comes from `VERSION`; packages use ad-hoc signing without Developer ID signing or Apple notarization. Running `swift run` starts a bare executable without the bundle's icon and language configuration.
+Use `bash scripts/build-app.sh --universal` for both architectures, or `bash scripts/package-release.sh` to produce DMG and local checksums in `dist/releases/1.3.0/`. Existing release output is not overwritten. The version comes from `VERSION`; packages use ad-hoc signing without Developer ID signing or Apple notarization. Running `swift run` starts a bare executable without the bundle's icon and language configuration.
 
 Liquid Glass appearance requires a macOS 26+ SDK and macOS 26+ at runtime; the minimum deployment target remains macOS 14. The build script records the actual linked SDK. CI uses Xcode 16.4 and checks the compatibility build, not Liquid Glass appearance.
+
+### Finder integration
+
+Version 1.3.0 includes a Finder extension for selected commits, confirmed working-copy updates, diffs, and history. Enable it through **Settings → Finder** and add the current working copy. See [setup and operation scope](docs/FINDER.md).
 
 ### Features
 
@@ -269,7 +277,7 @@ Directory rules are stored in `svn:ignore`, one name or pattern per line. They a
 - Passwords entered in the app stay in memory for the current session and are scoped to the authenticated repository root. They are passed through standard input using `--password-from-stdin`, with `--no-auth-cache`; they are not stored in UserDefaults or command-line arguments.
 - Without an app login, SVN uses its existing local authentication cache, proxy, and certificate configuration. Commands are noninteractive and do not silently trust certificates. URLs containing passwords are rejected.
 - Recent paths, repository addresses, and SVN settings are stored locally in UserDefaults. They are not part of this source repository.
-- There is no bundled SVN engine, Finder extension, three-way merge editor, sparse-checkout settings, or file-lock management yet.
+- There is no bundled SVN engine, file status badges, three-way merge editor, or file-lock management yet.
 - Externals and nested working copies are managed separately. Revert does not currently support conflicts, move pairs, or deleted/missing/replaced/copied directories.
 - Writes are serialized within one window. Do not modify the same working copy concurrently from another client.
 - Cancellation does not roll back completed work. Failed or cancelled checkout can leave a partial directory. If a commit result is unclear, inspect repository history before retrying.
@@ -281,7 +289,7 @@ Directory rules are stored in `svn:ignore`, one name or pattern per line. They a
 swift build
 ```
 
-[GitHub Actions](.github/workflows/ci.yml) builds the Release app on macOS 15 / Xcode 16.4, verifies its local signature, and checks whitespace. The separate [release workflow](.github/workflows/release.yml) validates version tags, builds universal packages, uploads assets to a draft, then publishes the release. Maintainers update `VERSION` and `release-notes/<version>.txt`, then push the matching `v<version>` tag. Automated test sources are not included in the current repository.
+[GitHub Actions](.github/workflows/ci.yml) builds the Release app on macOS 15 / Xcode 16.4, verifies its local signature, and checks whitespace. The separate [release workflow](.github/workflows/release.yml) validates version tags, builds universal packages, uploads assets to a draft, then publishes the release. Maintainers update `VERSION` and `release-notes/<version>.txt`, then push the matching `v<version>` tag. Run `bash scripts/test.sh` for Finder request validation, configuration, selected commits, and history pagination against isolated SVN repositories.
 
 ```text
 Sources/SVNCore/        SVN process execution, XML parsing, models, and operations
