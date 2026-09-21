@@ -2,6 +2,7 @@ import SwiftUI
 import SVNCore
 
 /// 原生表格中的差异行仅接收不可变数据，保留统一／并排视图的配色和行号。
+@MainActor
 enum DiffRows {
     private static func number(_ value: Int?) -> some View {
         Text(value.map(String.init) ?? "")
