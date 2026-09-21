@@ -627,3 +627,5 @@
 "访达：查看历史" = "Finder: Show History";
 "访达：打开工作副本" = "Finder: Open Working Copy";
 "重新读取状态失败：%@" = "Could not refresh status: %@";
+
+"正在准备差异视图…" = "Preparing diff view…";

@@ -31,12 +31,18 @@ struct DiffContentView: View {
     @ViewState private var sideBySide = false
     @ViewState private var document = UnifiedDiff("")
     @ViewState private var hunkIndex = 0
+    @ViewState private var measuredColumnWidth: CGFloat = 0
+    @ViewState private var measuredUnifiedWidth: CGFloat = 0
+    @ViewState private var documentID = UUID()
+    @ViewState private var scrollRequest: DiffScrollRequest?
+    @ViewState private var isPreparing = true
+    @ViewState private var preparationError: String?
 
     var body: some View {
         VStack(spacing: 0) {
             header
             Divider()
-            ScrollViewReader { proxy in
+            VStack(spacing: 0) {
                 if !document.hunkIDs.isEmpty {
                     HStack(spacing: 12) {
                         Picker(L10n.text("展示方式"), selection: $sideBySide) {
@@ -54,16 +60,20 @@ struct DiffContentView: View {
                             .foregroundStyle(.secondary)
                         Button {
                             hunkIndex -= 1
-                            proxy.scrollTo(document.hunkIDs[hunkIndex], anchor: .top)
+                            scrollRequest = DiffScrollRequest(lineID: document.hunkIDs[hunkIndex])
                         } label: { Image(systemName: "chevron.up") }
                         .disabled(hunkIndex == 0)
                         .help(L10n.text("上一处变更"))
+                        .accessibilityLabel(L10n.text("上一处变更"))
+                        .keyboardShortcut(.upArrow, modifiers: [.option, .command])
                         Button {
                             hunkIndex += 1
-                            proxy.scrollTo(document.hunkIDs[hunkIndex], anchor: .top)
+                            scrollRequest = DiffScrollRequest(lineID: document.hunkIDs[hunkIndex])
                         } label: { Image(systemName: "chevron.down") }
                         .disabled(hunkIndex == document.hunkIDs.count - 1)
                         .help(L10n.text("下一处变更"))
+                        .accessibilityLabel(L10n.text("下一处变更"))
+                        .keyboardShortcut(.downArrow, modifiers: [.option, .command])
                     }
                     .font(.system(size: 12, design: .monospaced))
                     .padding(12)
@@ -81,8 +91,17 @@ struct DiffContentView: View {
                     Divider()
                 }
                 GeometryReader { geometry in
-                    let width = columnWidth(available: geometry.size.width)
-                    if document.hunkIDs.isEmpty {
+                    let availableWidth = geometry.size.width
+                    let width = max((availableWidth - 1) / 2, measuredColumnWidth)
+                    if isPreparing {
+                        ProgressView(L10n.text("正在准备差异视图…"))
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else if let preparationError {
+                        Text(preparationError)
+                            .foregroundStyle(.red)
+                            .textSelection(.enabled)
+                            .padding(24)
+                    } else if document.hunkIDs.isEmpty {
                         ScrollView {
                             if document.containsBinaryNotice {
                                 binaryNotice
@@ -95,31 +114,21 @@ struct DiffContentView: View {
                         }
                         .background(Color(nsColor: .textBackgroundColor))
                     } else {
-                        ScrollView([.horizontal, .vertical]) {
-                            LazyVStack(alignment: .leading, spacing: 0) {
-                                if sideBySide {
-                                    ForEach(document.splitRows) { row in
-                                        splitRow(row, width: width)
-                                            .id(row.id)
-                                    }
-                                } else {
-                                    ForEach(document.lines) { line in
-                                        unifiedRow(line)
-                                            .frame(minWidth: geometry.size.width, alignment: .leading)
-                                            .id(line.id)
-                                    }
-                                }
-                            }
-                            .font(.system(size: 12, design: .monospaced))
-                            .textSelection(.enabled)
-                            .padding(.vertical, 8)
-                        }
-                        .background(Color(nsColor: .textBackgroundColor))
+                        DiffTableView(
+                            document: document,
+                            documentID: documentID,
+                            sideBySide: sideBySide,
+                            columnWidth: width,
+                            unifiedWidth: measuredUnifiedWidth,
+                            availableWidth: availableWidth,
+                            scrollRequest: scrollRequest
+                        )
                     }
                 }
                 .onChange(of: sideBySide) { _, _ in
-                    if let id = document.hunkIDs.first { proxy.scrollTo(id, anchor: .top) }
-                    hunkIndex = 0
+                    if !document.hunkIDs.isEmpty {
+                        scrollRequest = DiffScrollRequest(lineID: document.hunkIDs[hunkIndex])
+                    }
                 }
             }
             .clipShape(RoundedRectangle(cornerRadius: 10))
@@ -136,8 +145,7 @@ struct DiffContentView: View {
         }
         .frame(minWidth: 850, idealWidth: 1050, minHeight: 540, idealHeight: 680)
         .modifier(WorkspaceBackground())
-        .onAppear { updateDocument() }
-        .onChange(of: text) { _, _ in updateDocument() }
+        .task(id: text) { await updateDocument() }
     }
 
     private var header: some View {
@@ -163,6 +171,7 @@ struct DiffContentView: View {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(text, forType: .string)
                 }
+                .disabled(isPreparing)
             }
             if let fileURL {
                 Button(L10n.text("在 Finder 中显示")) {
@@ -212,80 +221,29 @@ struct DiffContentView: View {
         .frame(maxWidth: .infinity)
     }
 
-    private func updateDocument() {
-        document = UnifiedDiff(text)
+    /// 清空旧结果后准备新内容；取消的请求不能回填到已切换或关闭的视图。
+    @MainActor
+    private func updateDocument() async {
+        isPreparing = true
+        preparationError = nil
+        document = UnifiedDiff("")
+        measuredColumnWidth = 0
+        measuredUnifiedWidth = 0
+        scrollRequest = nil
         hunkIndex = 0
-    }
-
-    private func number(_ value: Int?) -> some View {
-        Text(value.map(String.init) ?? "")
-            .foregroundStyle(.secondary)
-            .frame(width: 48, alignment: .trailing)
-            .padding(.trailing, 10)
-            .background(Color.primary.opacity(0.035))
-    }
-
-    private func background(_ line: DiffLine) -> Color {
-        switch line.kind {
-        case .addition: .green.opacity(0.12)
-        case .deletion: .red.opacity(0.12)
-        case .hunk: .blue.opacity(0.08)
-        default: .clear
+        do {
+            let presentation = try await DiffPresentation.prepare(text: text)
+            try Task.checkCancellation()
+            document = presentation.document
+            measuredColumnWidth = presentation.columnWidth
+            measuredUnifiedWidth = presentation.unifiedWidth
+            documentID = UUID()
+            isPreparing = false
+        } catch {
+            guard !Task.isCancelled else { return }
+            preparationError = error.localizedDescription
+            isPreparing = false
         }
     }
 
-    private func unifiedRow(_ line: DiffLine) -> some View {
-        HStack(alignment: .top, spacing: 0) {
-            number(line.oldNumber)
-            number(line.newNumber)
-            Text(line.text.isEmpty ? " " : line.text)
-                .foregroundStyle(line.kind == .metadata || line.kind == .hunk ? .secondary : .primary)
-                .fixedSize(horizontal: true, vertical: false)
-                .padding(.horizontal, 12)
-            Spacer(minLength: 12)
-        }
-        .padding(.vertical, 4)
-        .background(background(line))
-    }
-
-    /// 并排栏使用相同宽度及单一滚动容器，让两个版本始终纵向对齐。
-    private func columnWidth(available: CGFloat) -> CGFloat {
-        let font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
-        let longest = document.lines.filter { $0.oldNumber != nil || $0.newNumber != nil }
-            .map { (String($0.text.dropFirst()) as NSString).size(withAttributes: [.font: font]).width + 100 }
-            .max() ?? 0
-        return max((available - 1) / 2, longest)
-    }
-
-    private func splitRow(_ row: DiffRow, width: CGFloat) -> some View {
-        Group {
-            if let line = row.spanning {
-                Text(line.text.isEmpty ? " " : line.text)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: true, vertical: false)
-                    .padding(.horizontal, 12).padding(.vertical, 4)
-                    .frame(minWidth: width * 2 + 1, alignment: .leading)
-                    .background(background(line))
-            } else {
-                HStack(spacing: 0) {
-                    splitCell(row.left, old: true, width: width)
-                    Rectangle().fill(.separator).frame(width: 1)
-                    splitCell(row.right, old: false, width: width)
-                }
-            }
-        }
-    }
-
-    private func splitCell(_ line: DiffLine?, old: Bool, width: CGFloat) -> some View {
-        HStack(spacing: 0) {
-            number(old ? line?.oldNumber : line?.newNumber)
-            Text(line.map { String($0.text.dropFirst()) } ?? " ")
-                .fixedSize(horizontal: true, vertical: false)
-                .padding(.horizontal, 12)
-            Spacer(minLength: 0)
-        }
-        .padding(.vertical, 4)
-        .frame(width: width, alignment: .leading)
-        .background(line.map(background) ?? Color.secondary.opacity(0.04))
-    }
 }

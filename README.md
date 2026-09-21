@@ -92,7 +92,7 @@ open "dist/Mac SVN.app"
 - 仓库地址输入框旁支持历史下拉选择；成功登录、浏览、检出或打开工作副本后保存地址，去重并保留最近 12 项。重新打开检出窗口默认填入最近地址，重启 App 后仍保留。
 - 在检出窗口或工具栏的“仓库账号”中输入账号、密码，验证通过后用于该仓库的浏览、检出、更新、历史和提交；支持切换账号，密码只保留在当前 App 会话。
 - 查看、筛选本地状态，识别内容修改、属性修改、缺失文件、文本及树冲突。
-- 点击文件弹出差异视图，主界面不常驻差异面板；支持统一／并排切换、新旧行号、增删统计、变更段跳转、复制原始差异及 Finder 定位。属性和二进制提示保留 SVN 原文。
+- 点击文件弹出差异视图，主界面不常驻差异面板；支持统一／并排切换、新旧行号、增删统计、变更段跳转、复制原始差异及 Finder 定位。属性和二进制提示保留 SVN 原文。差异解析和行宽测量在后台执行并缓存，正文使用原生表格复用可见行，关闭或切换内容时取消旧任务；切换展示方式保留当前变更段，支持 `⌘⌥↑`／`⌘⌥↓` 跳转。
 - “未纳入版本控制”表示项目仅存在于本地，尚未加入 SVN；点击可查看说明，不自动添加或上传。
 - 将未跟踪文件或目录添加到版本控制；添加目录时不递归添加子项。
 - 勾选文件、填写说明、检查清单后提交；提交前重新校验状态。
@@ -236,7 +236,7 @@ Version 1.3.0 includes a Finder extension for selected commits, confirmed workin
 - Inspect conflict types, operations, base/incoming revisions, and actual conflict files. Open the working file in its default editor, review the saved result, and explicitly confirm before marking a file-content conflict resolved. Content or conflict changes after review require a new review. SVN status is read back; committing remains a separate action. Property and tree conflicts are read-only and require SVN or a dedicated tool.
 - External three-way merging: choose a tool and save its installation path in Settings → Merge Tools, then launch it from conflict details. CLI presets cover IntelliJ IDEA, VS Code, Beyond Compare, Kaleidoscope, KDiff3, and FileMerge. IDEA launch, cancellation, and saving have been exercised; other presets still require acceptance with the respective applications. Install tools separately; FileMerge requires full Xcode. Conflict identity and all four files are rechecked before launch. Exiting the tool never resolves or commits automatically: save and close its merge window, then review and explicitly confirm in Mac SVN. Ordinary diffs continue to use the built-in viewer.
 - Review and filter local changes, including content, properties, missing files, and conflicts. Unversioned files are clearly distinguished from versioned changes.
-- Inspect unified or side-by-side text diffs with line numbers, change counts, and navigation between changed sections. Binary files, including Word documents, show an explicit limitation message with expandable original SVN diagnostics and property changes.
+- Inspect unified or side-by-side text diffs with line numbers, change counts, and navigation between changed sections. Parsing and text measurement run in a cancellable background task and are cached for subsequent view updates. A native table reuses visible row views for scrolling. Switching layouts preserves the current change; use `⌘⌥↑` / `⌘⌥↓` to navigate. Binary files, including Word documents, show an explicit limitation message with expandable original SVN diagnostics and property changes.
 - Rename or delete files and directories through context menus or the File Operations picker. Review all affected paths before confirming; directory deletion includes modified, unversioned, and ignored contents. Changes after review require a new review. Nested working copies and conflicts need separate handling. Rename preserves existing history; neither operation commits automatically.
 - Review commit scope, including required move counterparts, added parents, and descendants of structural directory operations. Ordinary directories do not include unselected children.
 - Review the actual changes before reverting. State and content are checked again at confirmation. Ordinary newly added files remain on disk after reverting their addition; files added with history may be deleted by SVN revert.
