@@ -100,21 +100,12 @@ struct CommitReviewView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             WorkspaceHeading(title: L10n.text("确认提交范围：%@ 项", plan.items.count), icon: "checklist")
-            Text(L10n.text("目录删除、替换和带历史复制会包含子项；移动两端及尚未提交的父目录也必须一并提交。以下为本次实际范围，返回后可重新选择。"))
-                .font(.callout)
             Text(model.workingCopy?.repositoryURL ?? "").font(.caption).textSelection(.enabled)
+            CommitReviewContent(plan: plan)
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 10) {
-                    ForEach(plan.items) { item in
-                        Text(item.path).font(.system(.body, design: .monospaced)).textSelection(.enabled)
-                        Text(item.reason).font(.caption).foregroundStyle(.secondary)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                Text(plan.message).frame(maxWidth: .infinity, alignment: .leading).textSelection(.enabled)
             }
-            .padding(12)
-            .modifier(WorkspacePanel())
-            Text(plan.message).textSelection(.enabled)
+            .frame(maxHeight: 64)
             HStack {
                 Spacer()
                 Button(L10n.text("返回检查"), role: .cancel) { model.commitPlan = nil }.keyboardShortcut(.cancelAction)
@@ -123,7 +114,7 @@ struct CommitReviewView: View {
             .disabled(model.isBusy)
         }
         .padding(24)
-        .frame(width: 700, height: 520)
+        .frame(width: 740, height: 620)
         .modifier(WorkspaceBackground())
     }
 }

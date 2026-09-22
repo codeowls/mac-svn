@@ -629,3 +629,20 @@
 "重新读取状态失败：%@" = "Could not refresh status: %@";
 
 "正在准备差异视图…" = "Preparing diff view…";
+
+// Pre-commit assistance
+"仅属性修改" = "Properties only";
+"结构关联项" = "Structural dependency";
+"尚未纳入版本控制，不会随本次提交上传。" = "Not under version control; this commit will not upload it.";
+"已安排新增，但未包含在本次提交范围中。" = "Scheduled for addition, but not included in this commit.";
+"名称符合系统目录元数据文件的特征，请确认是否需要共享。" = "The name matches a system metadata file. Check whether it should be shared.";
+"名称符合编辑器或 Office 临时文件的特征，请确认是否需要提交。" = "The name matches an editor or Office temporary file. Check whether it should be committed.";
+"名称符合临时或备份文件的特征；仅凭名称判断，请自行核实。" = "The name matches a temporary or backup file. This is a filename-based suggestion; please verify.";
+"新增内容中的疑似临时文件：%@ 项" = "Possible temporary files in new content: %@";
+"附近未纳入本次提交的新项目：%@ 项" = "Nearby new items outside this commit: %@";
+"这些项目与提交项位于同一目录，或位于待提交目录内，不一定属于本次任务。需要时返回工作区添加或勾选；访达入口可关闭后在主工作区处理。" = "These items share a directory with a commit item or are inside a directory being committed. They may belong to another task. Return to the workspace to add or select them if needed; from Finder, close this sheet and use the main workspace.";
+"实际提交范围：%@ 项" = "Actual commit scope: %@ items";
+"提交前辅助检查" = "Pre-commit assistance";
+"本次包含 %@ 个文件、%@ 个目录" = "This commit includes %@ files and %@ directories";
+"未发现符合当前规则的提示，仍请核对实际提交范围。" = "No suggestions from the current rules. Please still review the actual commit scope.";
+"提示仅供参考，不会改变提交范围。新项目检查不含已忽略项，未受控目录仅列目录；临时文件仅按新增或替换文件的名称判断。" = "Suggestions do not change the commit scope. New-item checks exclude ignored items and list unversioned directories without their contents. Temporary-file checks use only the names of added or replaced files.";

@@ -87,9 +87,11 @@ struct FinderOperationView: View {
             if let detail = item.error ?? error {
                 Text(detail).foregroundStyle(.red).textSelection(.enabled)
             }
-            ScrollView {
-                Text(output).font(.system(.body, design: .monospaced))
-                    .textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
+            if plan == nil || !output.isEmpty {
+                ScrollView {
+                    Text(output).font(.system(.body, design: .monospaced))
+                        .textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
             if action == .history, nextHistoryRevision != nil {
                 Button(L10n.text("加载更早记录")) { loadEarlierHistory() }.disabled(busy || model.isBusy)
@@ -134,15 +136,11 @@ struct FinderOperationView: View {
     @ViewBuilder private var commitForm: some View {
         if let plan {
             Text(L10n.text("确认提交范围：%@ 项", plan.items.count))
+            CommitReviewContent(plan: plan)
             ScrollView {
-                VStack(alignment: .leading, spacing: 8) {
-                    ForEach(plan.items) { entry in
-                        Text(entry.path).font(.system(.body, design: .monospaced))
-                        Text(entry.reason).font(.caption).foregroundStyle(.secondary)
-                    }
-                }.frame(maxWidth: .infinity, alignment: .leading)
-            }.frame(height: 180)
-            Text(plan.message).textSelection(.enabled)
+                Text(plan.message).frame(maxWidth: .infinity, alignment: .leading).textSelection(.enabled)
+            }
+            .frame(maxHeight: 64)
             HStack {
                 Button(L10n.text("返回检查")) { self.plan = nil }
                 Button(L10n.text("提交到仓库")) { commit(plan) }

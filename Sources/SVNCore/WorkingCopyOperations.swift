@@ -22,6 +22,8 @@ public struct CommitReviewItem: Identifiable, Sendable, Equatable {
     public var id: String { path }
     public let path: String
     public let reason: String
+    public let change: CommitChange
+    public let isDirectory: Bool
     let snapshot: String
 }
 
@@ -31,6 +33,7 @@ public struct CommitPlan: Identifiable, Sendable {
     public let requestedPaths: [String]
     public let message: String
     public let items: [CommitReviewItem]
+    public let assistance: CommitAssistance
     let targets: [String]
 }
 
@@ -107,6 +110,7 @@ extension SVNClient {
                     let oldPath = path + "/" + name
                     replacedBaseItems[oldPath] = CommitReviewItem(
                         path: oldPath, reason: L10n.text("目录替换将移除或替换的原 BASE 子项：%@", path),
+                        change: .deleted, isDirectory: child.attributes["kind"] == "dir",
                         snapshot: try conflictMetadataDigest(child)
                     )
                 }
@@ -118,22 +122,27 @@ extension SVNClient {
             let content = try contentDigest(at: directory.appendingPathComponent(path), isDirectory: isDirectory) ?? ""
             let snapshot = try conflictMetadataDigest(info) + conflictMetadataDigest(stateTree)
                 + conflictMetadataDigest(XMLReader.parse(properties.stdout)) + content
-            reviewed[path] = CommitReviewItem(path: path, reason: next.value, snapshot: snapshot)
+            reviewed[path] = CommitReviewItem(
+                path: path, reason: next.value, change: CommitChange(state),
+                isDirectory: isDirectory, snapshot: snapshot
+            )
         }
         let targets = reviewed.keys.sorted()
         for (path, oldItem) in replacedBaseItems {
             if let newItem = reviewed[path] {
                 reviewed[path] = CommitReviewItem(
                     path: path, reason: newItem.reason + L10n.text("；替换原 BASE 子项"),
+                    change: .replaced, isDirectory: newItem.isDirectory,
                     snapshot: newItem.snapshot + oldItem.snapshot
                 )
             } else {
                 reviewed[path] = oldItem
             }
         }
+        let items = reviewed.values.sorted { $0.path < $1.path }
         return CommitPlan(
             root: directory, requestedPaths: Set(paths).sorted(), message: message,
-            items: reviewed.values.sorted { $0.path < $1.path }, targets: targets
+            items: items, assistance: CommitAssistance(items: items, current: current), targets: targets
         )
     }
 
