@@ -283,13 +283,15 @@ struct ContentView: View {
                 Button { showLogin = true } label: {
                     Label(
                         model.authenticationStore.authentication(for: copy.repositoryURL)
-                            .map { L10n.text("账号：%@", $0.username) } ?? L10n.text("未在 App 登录"),
+                            .map { L10n.text("账号：%@", $0.username) }
+                            ?? (model.hasSavedAuthentication(for: copy.repositoryURL)
+                                ? L10n.text("已保存仓库账号") : L10n.text("未在 App 登录")),
                         systemImage: "person.crop.circle"
                     )
                     .font(.caption)
                 }
                 .disabled(model.isBusy)
-                .help(L10n.text("账号按仓库地址隔离；未在 App 登录时使用本机 SVN 已有的认证配置。密码仅保留在当前 App 会话。"))
+                .help(L10n.text("账号按仓库地址隔离，可在登录窗口选择记住密码或退出账号；未在 App 登录时沿用系统 SVN 认证配置。"))
                 Text("r\(copy.revision)").font(.system(.caption, design: .monospaced))
                     .padding(.horizontal, 10).padding(.vertical, 6)
                     .foregroundStyle(WorkspaceStyle.accent)

@@ -8,6 +8,8 @@ struct RepositoryLoginView: View {
     @Environment(\.dismiss) private var dismiss
     @ViewState private var username = ""
     @ViewState private var password = ""
+    @ViewState private var rememberPassword = false
+    @ViewState private var hasAccount = false
     @ViewState private var errorMessage: String?
     @ViewState private var request: Task<Void, Never>?
     @ViewState private var isLoading = false
@@ -32,8 +34,17 @@ struct RepositoryLoginView: View {
             .padding(16)
             .modifier(WorkspacePanel())
             .disabled(isLoading)
-            Text(L10n.text("密码仅用于本次 App 会话，退出后需重新登录。登录成功表示可以读取仓库，提交仍由服务器检查写权限。"))
+            Toggle(L10n.text("记住密码（保存到本机钥匙串）"), isOn: $rememberPassword)
+                .toggleStyle(.checkbox)
+                .disabled(isLoading)
+            Text(L10n.text("勾选后，下次访问同一仓库可使用已保存账号。不勾选则仅在本次会话使用，登录成功后清除该仓库之前保存的密码。提交权限仍由服务器检查。"))
                 .font(.caption).foregroundStyle(.secondary)
+            if hasAccount || model.hasSavedAuthentication(for: repository) {
+                Button(L10n.text("退出账号并清除已保存密码")) { signOut() }
+                    .disabled(isLoading || model.isBusy)
+                Text(L10n.text("仅清除本应用的会话和钥匙串条目；不会清除系统 SVN 认证缓存，退出后系统配置仍可能提供认证。"))
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             if let errorMessage {
                 ScrollView {
                     Text(errorMessage)
@@ -65,7 +76,14 @@ struct RepositoryLoginView: View {
         .frame(width: 480)
         .modifier(WorkspaceBackground())
         .onAppear {
-            username = model.authenticationStore.authentication(for: repository)?.username ?? ""
+            do {
+                let account = try model.authentication(for: repository)
+                username = account?.username ?? ""
+                hasAccount = account != nil
+                rememberPassword = model.hasSavedAuthentication(for: repository)
+            } catch {
+                errorMessage = error.localizedDescription
+            }
         }
         .onDisappear {
             request?.cancel()
@@ -83,7 +101,10 @@ struct RepositoryLoginView: View {
         request = Task { @MainActor in
             defer { isLoading = false }
             do {
-                try await model.authenticate(repository: repository, username: username, password: password)
+                try await model.authenticate(
+                    repository: repository, username: username, password: password,
+                    rememberPassword: rememberPassword
+                )
                 password = ""
                 onLogin()
                 dismiss()
@@ -92,6 +113,16 @@ struct RepositoryLoginView: View {
             } catch {
                 errorMessage = error.localizedDescription
             }
+        }
+    }
+
+    private func signOut() {
+        do {
+            try model.signOut(repository: repository)
+            password = ""
+            dismiss()
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 }

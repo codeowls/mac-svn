@@ -79,6 +79,9 @@ struct CheckoutView: View {
                     if let account = model.authenticationStore.authentication(for: browser.checkoutURL) {
                         Label(L10n.text("已登录：%@", account.username), systemImage: "person.crop.circle.badge.checkmark")
                             .font(.caption).foregroundStyle(.secondary)
+                    } else if model.hasSavedAuthentication(for: browser.checkoutURL) {
+                        Label(L10n.text("已保存仓库账号"), systemImage: "person.crop.circle.badge.checkmark")
+                            .font(.caption).foregroundStyle(.secondary)
                     } else {
                         Text(L10n.text("私有仓库可先登录，再浏览或检出。"))
                             .font(.caption).foregroundStyle(.secondary)

@@ -116,7 +116,7 @@ struct SettingsView: View {
                 .font(.caption).foregroundStyle(.secondary)
             Text("brew install subversion")
                 .font(.system(.callout, design: .monospaced)).textSelection(.enabled)
-            Text(L10n.text("仓库账号仍在检出窗口或工具栏中管理。密码仅保留在当前 App 会话，未登录时沿用本机 SVN 认证配置。"))
+            Text(L10n.text("仓库账号在检出窗口或工具栏中管理。可选择将密码保存到本机钥匙串，也可退出并清除已保存密码；未登录时沿用系统 SVN 认证配置。"))
                 .font(.caption).foregroundStyle(.secondary)
         }
     }

@@ -30,13 +30,13 @@ Real screenshots of the app using a local demo repository and the author `demo`.
 
 ## 简体中文
 
-当前版本为 **1.3.0**，面向日常 SVN 工作副本管理。源码采用 MIT 协议；应用尚未完成正式签名、公证和跨设备兼容性验证。
+当前版本为 **1.4.0**，面向日常 SVN 工作副本管理。源码采用 MIT 协议；应用尚未完成正式签名、公证和跨设备兼容性验证。
 
 ## 下载与安装
 
-前往 [GitHub Releases](https://github.com/codeowls/mac-svn/releases/latest) 下载，或直接选择 **1.3.0** 安装包：
+前往 [GitHub Releases](https://github.com/codeowls/mac-svn/releases/latest) 下载，或直接选择 **1.4.0** 安装包：
 
-- [DMG 安装包（推荐）](https://github.com/codeowls/mac-svn/releases/download/v1.3.0/Mac-SVN-1.3.0-universal.dmg)：打开后将 **Mac SVN.app** 拖入 **Applications（应用程序）**。
+- [DMG 安装包（推荐）](https://github.com/codeowls/mac-svn/releases/download/v1.4.0/Mac-SVN-1.4.0-universal.dmg)：打开后将 **Mac SVN.app** 拖入 **Applications（应用程序）**。
 
 安装包要求 **macOS 14+**，同时包含 **Apple Silicon / Intel** 架构，无需安装 Swift 或 Xcode。已在 Apple Silicon 验收；Intel 已完成构建，尚未进行 Intel 实机验收。App 仍需本机 **Subversion 1.14+**；已安装 Homebrew 时运行 `brew install subversion`，启动后可在设置中检测或指定 SVN 路径。应用支持简体中文和英文，可在设置中切换，重启后生效。
 
@@ -66,7 +66,7 @@ open "dist/Mac SVN.app"
 
 构建脚本默认将 SwiftPM 并行任务数和编译器线程数均设为 2，以降低本机负载；这不是严格的 CPU 占用上限。可用 `SWIFT_BUILD_JOBS=1 bash scripts/build-app.sh` 进一步降低并发，或按需增加该正整数。通用包的两个架构依次构建，`package-release.sh` 也沿用此设置。正式安装包可由下述 GitHub Actions 发布流程构建，无需在本机重复打包。
 
-运行 `bash scripts/package-release.sh` 生成通用架构 DMG 和本地 SHA256 校验文件，输出到 `dist/releases/1.3.0/`；已有同版本输出时拒绝覆盖。维护者更新 `VERSION` 及 `release-notes/<版本>.txt` 后推送对应 `v<版本>` 标签，发布工作流会校验标签、构建验证安装包、上传附件后公开 Release。
+运行 `bash scripts/package-release.sh` 生成通用架构 DMG 和本地 SHA256 校验文件，输出到 `dist/releases/1.4.0/`；已有同版本输出时拒绝覆盖。维护者更新 `VERSION` 及 `release-notes/<版本>.txt` 后推送对应 `v<版本>` 标签，发布工作流会校验标签、构建验证安装包、上传附件后公开 Release。
 
 打包时自动生成并嵌入原生 App 图标；源图和图标说明位于 [`assets/`](assets/README.md)。通过打包后的 `.app` 启动可使用该图标。打包脚本会刷新该 App 的 Launch Services 注册，启动时重新载入 Dock 图标；重建后请退出旧进程再打开 `dist/Mac SVN.app`。`swift run` 是裸可执行文件调试入口，不包含 `.app` 的图标和语言声明。
 
@@ -76,7 +76,7 @@ open "dist/Mac SVN.app"
 
 ## 访达集成
 
-1.3.0 安装包包含访达扩展，可从右键菜单提交所选项目、确认更新整个工作副本、查看差异和历史。请在“设置 → 访达”启用扩展并添加当前工作副本。详见[启用步骤与操作范围](docs/FINDER.md)。
+1.4.0 安装包包含访达扩展，可从右键菜单提交所选项目、确认更新整个工作副本、查看差异和历史。请在“设置 → 访达”启用扩展并添加当前工作副本。详见[启用步骤与操作范围](docs/FINDER.md)。
 
 ## 当前功能
 
@@ -90,13 +90,13 @@ open "dist/Mac SVN.app"
 - 打开已有工作副本，保存最近打开记录；已有记录切换时保持原位，新副本加入顶部；右键记录并选择“删除…”后，弹窗显示完整路径；确认“移除记录”才从列表移除，取消不改变记录。移除结果在重启后仍生效，不删除磁盘文件。移除当前副本或清空列表时，清空工作区并返回欢迎页；移除其他记录不影响当前工作区。从子目录打开时定位到工作副本根目录。
 - 直接输入远端分支 URL 检出，或逐层浏览仓库目录、进入所需分支后检出到新目录；支持标准及自定义分支布局。
 - 仓库地址输入框旁支持历史下拉选择；成功登录、浏览、检出或打开工作副本后保存地址，去重并保留最近 12 项。重新打开检出窗口默认填入最近地址，重启 App 后仍保留。
-- 在检出窗口或工具栏的“仓库账号”中输入账号、密码，验证通过后用于该仓库的浏览、检出、更新、历史和提交；支持切换账号，密码只保留在当前 App 会话。
+- 在检出窗口或工具栏的“仓库账号”中输入账号、密码，验证通过后用于该仓库的浏览、检出、更新、历史和提交；支持切换账号、可选记住密码，以及退出账号并清除保存的密码。
 - 查看、筛选本地状态，识别内容修改、属性修改、缺失文件、文本及树冲突。
 - 点击文件弹出差异视图，主界面不常驻差异面板；支持统一／并排切换、新旧行号、增删统计、变更段跳转、复制原始差异及 Finder 定位。属性和二进制提示保留 SVN 原文。差异解析和行宽测量在后台执行并缓存，正文使用原生表格复用可见行，关闭或切换内容时取消旧任务；切换展示方式保留当前变更段，支持 `⌘⌥↑`／`⌘⌥↓` 跳转。
 - “未纳入版本控制”表示项目仅存在于本地，尚未加入 SVN；点击可查看说明，不自动添加或上传。
 - 将未跟踪文件或目录添加到版本控制；添加目录时不递归添加子项。
 - 勾选文件、填写说明、检查清单后提交；提交前重新校验状态。
-- 提交前辅助检查（尚未发布）：主工作区与访达提交共用实际范围汇总，按新增、修改、删除、替换等统计文件／目录；提示同目录或待提交目录内未包含的新项目，以及新增／替换内容中疑似系统元数据、编辑器临时和备份文件。提示列出路径及依据，仅供参考，不自动添加、排除或阻止提交；不扫描业务语义，不含已忽略项，未受控目录仅列目录。
+- 提交前辅助检查：主工作区与访达提交共用实际范围汇总，按新增、修改、删除、替换等统计文件／目录；提示同目录或待提交目录内未包含的新项目，以及新增／替换内容中疑似系统元数据、编辑器临时和备份文件。提示列出路径及依据，仅供参考，不自动添加、排除或阻止提交；不扫描业务语义，不含已忽略项，未受控目录仅列目录。
 - 点击冲突项目查看类型、操作、原基准／传入版本及真实辅助文件；内容冲突可用默认编辑器打开工作文件，保存后重新读取并检查最终内容。明确确认后才采用当前文件标记解决，确认期间内容或冲突状态变化会拒绝执行；完成后重新读取 SVN 状态，仍需单独提交。属性和树冲突仅提供详情，需用 SVN 命令行或专用工具处理。
 - 支持外部三方合并入口：在“设置 → 合并工具”选择工具并保存安装路径，再从冲突详情打开。提供 IntelliJ IDEA、VS Code、Beyond Compare、Kaleidoscope、KDiff3、FileMerge 的命令行预设；IDEA 已实测启动、取消及保存，其他预设尚待各工具实机验收。工具需自行安装，FileMerge 需要完整 Xcode。启动前重新核对冲突和四个文件，工具退出不会自动解决或提交；保存并关闭合并窗口后，返回检查最终内容并确认。日常差异查看仍使用内置视图。
 - 更新工作副本，产生冲突时保留冲突供后续处理。更新与提交自动展开真实 SVN 输出，显示耗时及进行中／完成／失败／取消状态；失败或取消保留日志，提交结果不明时提示先核实历史。
@@ -147,7 +147,8 @@ bash scripts/create-demo.sh
 ## 认证与已知边界
 
 - 私有仓库可直接通过“仓库账号”登录，支持 `http://`、`https://` 和 `svn://`。登录仅验证读取权限，写权限由提交时的服务器授权检查决定；失败不会自动重试提交。`file://` 不需要登录，`svn+ssh://` 继续使用系统 SSH 认证。
-- App 中输入的密码仅保留在本次会话，按验证成功的仓库根路径隔离；关闭 App 后需重新登录。密码通过标准输入传递，不放入进程参数、不写入 UserDefaults 或 SVN 认证缓存。未在 App 登录的仓库仍使用本机 SVN 已配置的认证缓存、代理和证书。
+- 密码默认仅保留在本次会话，按验证成功的仓库根路径隔离。勾选“记住密码”后保存到本机 macOS 钥匙串，下次访问该仓库时读取；取消勾选并成功登录会清除该仓库之前保存的密码。账号窗口提供退出并清除入口，只处理本应用的会话和钥匙串条目，不清除系统 SVN 认证缓存。
+- 密码通过标准输入传递，不放入进程参数、不写入 UserDefaults 或 SVN 认证缓存。未在 App 登录的仓库仍使用本机 SVN 已配置的认证缓存、代理和证书，因此退出 App 账号后系统配置仍可能提供认证。
 - 所有命令使用 `--non-interactive`，不静默信任证书；URL 不允许包含密码。显式登录使用 SVN 1.14+ 的 `--password-from-stdin`。
 - 尚未内置 SVN 引擎、文件状态角标、三方合并编辑器或文件锁管理。
 - 检出、状态扫描和更新使用 `--ignore-externals`；外部工作副本需单独打开管理。
@@ -181,13 +182,13 @@ scripts/build-app.sh  本地 .app 打包
 
 ## English
 
-**Version 1.3.0.** Mac SVN is a native SwiftUI client for everyday Subversion work. Source code is available under the MIT License. The app has not yet completed release signing, notarization, or cross-device compatibility validation.
+**Version 1.4.0.** Mac SVN is a native SwiftUI client for everyday Subversion work. Source code is available under the MIT License. The app has not yet completed release signing, notarization, or cross-device compatibility validation.
 
 ### Download and install
 
-Visit [GitHub Releases](https://github.com/codeowls/mac-svn/releases/latest), or download **1.3.0** directly:
+Visit [GitHub Releases](https://github.com/codeowls/mac-svn/releases/latest), or download **1.4.0** directly:
 
-- [DMG installer (recommended)](https://github.com/codeowls/mac-svn/releases/download/v1.3.0/Mac-SVN-1.3.0-universal.dmg): open it and drag **Mac SVN.app** into **Applications**.
+- [DMG installer (recommended)](https://github.com/codeowls/mac-svn/releases/download/v1.4.0/Mac-SVN-1.4.0-universal.dmg): open it and drag **Mac SVN.app** into **Applications**.
 
 Requires **macOS 14+** and local **Subversion 1.14+**. Both **Apple Silicon and Intel** architectures are included; Swift/Xcode is not required. Apple Silicon runtime checks passed; Intel is built but has not been tested on physical Intel hardware. With Homebrew already installed, run `brew install subversion`; the SVN path can be selected in app Settings. The app interface is Simplified Chinese.
 
@@ -218,13 +219,13 @@ The script builds for the local architecture, embeds the app icon and language d
 
 Build scripts default to 2 SwiftPM jobs and 2 compiler threads to reduce local load; this is not a strict CPU usage cap. Use `SWIFT_BUILD_JOBS=1 bash scripts/build-app.sh` to reduce concurrency further, or choose another positive integer. Universal builds process architectures sequentially, and `package-release.sh` inherits the same setting. The GitHub Actions release workflow can build distribution packages without repeating that work locally.
 
-Use `bash scripts/build-app.sh --universal` for both architectures, or `bash scripts/package-release.sh` to produce DMG and local checksums in `dist/releases/1.3.0/`. Existing release output is not overwritten. The version comes from `VERSION`; packages use ad-hoc signing without Developer ID signing or Apple notarization. Running `swift run` starts a bare executable without the bundle's icon and language configuration.
+Use `bash scripts/build-app.sh --universal` for both architectures, or `bash scripts/package-release.sh` to produce DMG and local checksums in `dist/releases/1.4.0/`. Existing release output is not overwritten. The version comes from `VERSION`; packages use ad-hoc signing without Developer ID signing or Apple notarization. Running `swift run` starts a bare executable without the bundle's icon and language configuration.
 
 Liquid Glass appearance requires a macOS 26+ SDK and macOS 26+ at runtime; the minimum deployment target remains macOS 14. The build script records the actual linked SDK. CI uses Xcode 16.4 and checks the compatibility build, not Liquid Glass appearance.
 
 ### Finder integration
 
-Version 1.3.0 includes a Finder extension for selected commits, confirmed working-copy updates, diffs, and history. Enable it through **Settings → Finder** and add the current working copy. See [setup and operation scope](docs/FINDER.md).
+Version 1.4.0 includes a Finder extension for selected commits, confirmed working-copy updates, diffs, and history. Enable it through **Settings → Finder** and add the current working copy. See [setup and operation scope](docs/FINDER.md).
 
 ### Features
 
@@ -240,7 +241,7 @@ Version 1.3.0 includes a Finder extension for selected commits, confirmed workin
 - Inspect unified or side-by-side text diffs with line numbers, change counts, and navigation between changed sections. Parsing and text measurement run in a cancellable background task and are cached for subsequent view updates. A native table reuses visible row views for scrolling. Switching layouts preserves the current change; use `⌘⌥↑` / `⌘⌥↓` to navigate. Binary files, including Word documents, show an explicit limitation message with expandable original SVN diagnostics and property changes.
 - Rename or delete files and directories through context menus or the File Operations picker. Review all affected paths before confirming; directory deletion includes modified, unversioned, and ignored contents. Changes after review require a new review. Nested working copies and conflicts need separate handling. Rename preserves existing history; neither operation commits automatically.
 - Review commit scope, including required move counterparts, added parents, and descendants of structural directory operations. Ordinary directories do not include unselected children.
-- Pre-commit assistance (unreleased): both workspace and Finder reviews summarize actual changes and file/directory counts. Suggestions identify omitted new items in the same directories or inside reviewed directories, plus filename patterns for system metadata, editor temporary files, and backups in added/replaced content. Each suggestion shows its path and reason without adding, excluding, or blocking anything. Checks do not analyze code semantics, exclude ignored items, and list unversioned directories without enumerating their contents.
+- Pre-commit assistance: both workspace and Finder reviews summarize actual changes and file/directory counts. Suggestions identify omitted new items in the same directories or inside reviewed directories, plus filename patterns for system metadata, editor temporary files, and backups in added/replaced content. Each suggestion shows its path and reason without adding, excluding, or blocking anything. Checks do not analyze code semantics, exclude ignored items, and list unversioned directories without enumerating their contents.
 - Review the actual changes before reverting. State and content are checked again at confirmation. Ordinary newly added files remain on disk after reverting their addition; files added with history may be deleted by SVN revert.
 - Browse history in pages of 50 revisions, filter loaded records by author, message, and path, and view history for an individual versioned path. Click a changed file or directory row to inspect its historical diff, including copy-source comparisons.
 - Export either existing side of a historical file comparison, including binary files and copy sources. Replacement exports retain the replaced node as the before version. Exports preserve raw bytes and file extensions, exclude SVN properties, and must be saved outside the current working copy. Failed or cancelled reads leave the destination untouched.
@@ -276,7 +277,8 @@ Directory rules are stored in `svn:ignore`, one name or pattern per line. They a
 ### Authentication and limitations
 
 - Session login supports `http://`, `https://`, and `svn://`. `file://` needs no login; `svn+ssh://` uses the system SSH setup. Successful login verifies read access; the server checks write permission during commit.
-- Passwords entered in the app stay in memory for the current session and are scoped to the authenticated repository root. They are passed through standard input using `--password-from-stdin`, with `--no-auth-cache`; they are not stored in UserDefaults or command-line arguments.
+- Passwords stay in memory for the current session by default and are scoped to the authenticated repository root. Opt into Remember password to store credentials in the local macOS Keychain for future access. Signing in successfully with this option unchecked removes the previously saved password for that repository. The account dialog also offers sign out and removal of the app's saved credentials; system SVN authentication caches are left intact and may still authenticate requests.
+- Passwords are passed through standard input using `--password-from-stdin`, with `--no-auth-cache`; they are not stored in UserDefaults or command-line arguments.
 - Without an app login, SVN uses its existing local authentication cache, proxy, and certificate configuration. Commands are noninteractive and do not silently trust certificates. URLs containing passwords are rejected.
 - Recent paths, repository addresses, and SVN settings are stored locally in UserDefaults. They are not part of this source repository.
 - There is no bundled SVN engine, file status badges, three-way merge editor, or file-lock management yet.

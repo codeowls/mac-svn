@@ -124,11 +124,21 @@ final class AppModel: ObservableObject {
     @Published var conflictError: String?
     @Published private(set) var externalMergeActivity: ExternalMergeActivity?
     @Published private(set) var authenticationStore = SVNAuthenticationStore()
+    @Published private(set) var savedAuthenticationRoots: [String] = []
     @Published private(set) var isAuthenticating = false
+    private let keychain = SVNKeychain()
     private var operationTask: Task<Void, Never>?
     private var diffTask: Task<Void, Never>?
     private var externalMergeTask: Task<Void, Never>?
     private var workingCopyDrafts: [WorkingCopyDraftKey: WorkingCopyDraft] = [:]
+
+    init() {
+        do {
+            savedAuthenticationRoots = try keychain.roots()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
 
     var isBusy: Bool { !operation.isEmpty || isAuthenticating }
     var selectedEntries: [StatusEntry] { entries.filter { selectedPaths.contains($0.path) } }
@@ -148,9 +158,7 @@ final class AppModel: ObservableObject {
         guard FileManager.default.isExecutableFile(atPath: executablePath) else {
             throw SVNError(L10n.text("未找到 SVN。请先运行 brew install subversion，并在设置中指定 svn 可执行文件。"))
         }
-        let authentication = (repository ?? workingCopy?.repositoryURL).flatMap {
-            authenticationStore.authentication(for: $0)
-        }
+        let authentication = try (repository ?? workingCopy?.repositoryURL).flatMap { try authentication(for: $0) }
         return SVNClient(
             executable: URL(fileURLWithPath: executablePath),
             authentication: authentication,
@@ -158,8 +166,8 @@ final class AppModel: ObservableObject {
         )
     }
 
-    /// 登录仅做远端读取验证，成功后按仓库根路径保存会话，不自动重试写操作。
-    func authenticate(repository: String, username: String, password: String) async throws {
+    /// 登录先验证远端读取权限，再按明确选择保存；存储失败不会显示为登录完成。
+    func authenticate(repository: String, username: String, password: String, rememberPassword: Bool = false) async throws {
         guard !isBusy else {
             throw SVNError(L10n.text("请等待当前操作完成。"))
         }
@@ -168,14 +176,54 @@ final class AppModel: ObservableObject {
             throw SVNError(L10n.text("账号密码登录支持 http://、https:// 和 svn:// 地址。file:// 不需要登录，svn+ssh:// 使用系统 SSH 认证。"))
         }
         let authentication = try SVNAuthentication(username: username, password: password)
-        let executable = try client(for: repository).executable
+        // 重新登录必须可以修复过期或损坏的钥匙串条目，无需先读取旧密码。
+        let executable = try SVNConfiguration.executableURL(for: executablePath)
         isAuthenticating = true
         defer { isAuthenticating = false }
         let client = SVNClient(executable: executable, authentication: authentication, globalIgnores: globalIgnores)
         let location = try await client.repositoryLocation(repository)
         try Task.checkCancellation()
+        if rememberPassword {
+            try keychain.save(authentication, for: location.rootURL)
+        } else {
+            try keychain.remove(for: location.rootURL)
+        }
+        savedAuthenticationRoots.removeAll { $0 == location.rootURL }
+        if rememberPassword { savedAuthenticationRoots.append(location.rootURL) }
         authenticationStore.set(authentication, for: location.rootURL)
         rememberRepository(location.url)
+    }
+
+    func hasSavedAuthentication(for repository: String) -> Bool {
+        SVNAuthenticationStore.matchingRoot(for: repository, in: savedAuthenticationRoots) != nil
+    }
+
+    /// 仅在使用目标仓库或主动打开账号窗口时读取对应密码；读取失败保持原始错误。
+    func authentication(for repository: String) throws -> SVNAuthentication? {
+        guard let scheme = URLComponents(string: repository)?.scheme?.lowercased(),
+              ["http", "https", "svn"].contains(scheme) else { return nil }
+        savedAuthenticationRoots = try keychain.roots()
+        guard let root = SVNAuthenticationStore.matchingRoot(
+            for: repository, in: Array(Set(authenticationStore.roots + savedAuthenticationRoots))
+        ) else { return nil }
+        if authenticationStore.roots.contains(root) {
+            return authenticationStore.authentication(for: root)
+        }
+        let authentication = try keychain.authentication(for: root)
+        authenticationStore.set(authentication, for: root)
+        return authentication
+    }
+
+    /// 先清除本应用保存的密码，再退出对应会话，避免失败时误报账号已经清除。
+    func signOut(repository: String) throws {
+        guard !isBusy else { throw SVNError(L10n.text("请等待当前操作完成。")) }
+        savedAuthenticationRoots = try keychain.roots()
+        guard let root = SVNAuthenticationStore.matchingRoot(
+            for: repository, in: Array(Set(authenticationStore.roots + savedAuthenticationRoots))
+        ) else { return }
+        try keychain.remove(for: root)
+        authenticationStore.remove(for: root)
+        savedAuthenticationRoots.removeAll { $0 == root }
     }
 
     /// Finder and the main workspace share one operation slot and repository credentials.

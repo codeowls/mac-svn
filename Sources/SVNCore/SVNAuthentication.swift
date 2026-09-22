@@ -28,14 +28,26 @@ public struct SVNAuthenticationStore: Sendable {
         sessions[rootURL] = authentication
     }
 
+    public var roots: [String] { Array(sessions.keys) }
+
+    public mutating func remove(for rootURL: String) {
+        sessions.removeValue(forKey: rootURL)
+    }
+
     public func authentication(for repository: String) -> SVNAuthentication? {
+        guard let root = Self.matchingRoot(for: repository, in: roots) else { return nil }
+        return sessions[root]
+    }
+
+    /// 会话与钥匙串共用同一仓库边界判断，优先匹配最具体的已验证根地址。
+    public static func matchingRoot(for repository: String, in roots: [String]) -> String? {
         guard let target = URLComponents(string: repository) else {
             return nil
         }
         guard !target.path.split(separator: "/").contains(where: { $0 == "." || $0 == ".." }) else {
             return nil
         }
-        let matchingRoot = sessions.keys.filter { root in
+        return roots.filter { root in
             guard let scope = URLComponents(string: root),
                   scope.scheme?.lowercased() == target.scheme?.lowercased(),
                   scope.host?.lowercased() == target.host?.lowercased(),
@@ -46,14 +58,10 @@ public struct SVNAuthenticationStore: Sendable {
             let path = scope.path.hasSuffix("/") ? String(scope.path.dropLast()) : scope.path
             return target.path == path || target.path.hasPrefix(path + "/")
         }.max { $0.count < $1.count }
-        guard let matchingRoot else {
-            return nil
-        }
-        return sessions[matchingRoot]
     }
 
     /// SVN 会在返回的规范地址中省略默认端口，显式写出的默认端口仍属于同一服务器。
-    private func effectivePort(_ components: URLComponents) -> Int? {
+    private static func effectivePort(_ components: URLComponents) -> Int? {
         if let port = components.port {
             return port
         }

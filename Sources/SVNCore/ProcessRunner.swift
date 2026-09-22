@@ -32,7 +32,7 @@ public struct SVNError: LocalizedError, Sendable {
         let detail = xmlOutput ? output.stderr : output.stderr + output.stdout
         let reason = detail.trimmingCharacters(in: .whitespacesAndNewlines)
         let summary = requiresAuthentication
-            ? L10n.text("仓库需要有效账号，或当前账号没有访问权限。请登录仓库后重试；密码仅保留在当前 App 会话中。")
+            ? L10n.text("仓库需要有效账号，或当前账号没有访问权限。请在仓库账号窗口登录后重试。")
             : L10n.text("SVN 退出码 %@", output.exitCode)
         message = reason.isEmpty ? summary : "\(summary)\n\n\(reason)"
     }

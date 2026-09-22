@@ -1,0 +1,19 @@
+Mac SVN 1.4.0
+
+- 新增提交前辅助检查：主工作区与访达共用实际变更统计，提示附近遗漏的新项目及疑似临时／备份文件，展示路径和依据，不自动改变提交范围。
+- 仓库账号支持可选“记住密码”，验证成功后保存到本机 macOS 钥匙串，重启后访问对应仓库可自动读取；默认仍仅在当前会话保留密码。
+- 新增退出账号并清除已保存密码入口；取消记住密码并成功登录也会清除原保存条目。凭据按仓库隔离，不清除系统 SVN 认证缓存。
+- 优化大 Diff：后台准备与取消、统计和行宽缓存、原生表格滚动；统一／并排切换保留当前变更段，支持 ⌘⌥↑／↓ 跳转。
+- 修正 Diff 行渲染的主线程隔离，保持 Xcode 16.4 构建兼容。
+
+要求 macOS 14+ 和本机 Subversion 1.14+；安装包包含 Apple Silicon / Intel 架构。
+本版仍采用 ad-hoc 签名，未进行 Developer ID 签名或 Apple 公证。跨设备及 Intel 实机兼容性尚未验证。
+
+English
+- Pre-commit summaries and advisory checks in both workspace and Finder reviews, including omitted nearby new items and temporary/backup filename patterns. Suggestions show paths and reasons without changing commit targets.
+- Optional Remember password stores successfully verified repository credentials in the local macOS Keychain for access after restarting. Passwords remain session-only by default.
+- Sign out and remove the app's saved credentials for the repository. Successful sign-in with Remember password unchecked also removes the previous saved entry. System SVN authentication caches remain unchanged.
+- Faster large diffs with cancellable background preparation, cached statistics and widths, and native table scrolling. Unified/split switches preserve the current hunk; Command-Option-Up/Down navigates changes.
+- Main-actor isolation fix for diff rows, compatible with Xcode 16.4 builds.
+
+Requires macOS 14+ and Subversion 1.14+. Universal Apple Silicon / Intel package. Ad-hoc signed, without Developer ID signing or Apple notarization. Cross-device and Intel hardware validation remain pending.
