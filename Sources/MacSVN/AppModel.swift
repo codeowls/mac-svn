@@ -158,10 +158,15 @@ final class AppModel: ObservableObject {
         guard FileManager.default.isExecutableFile(atPath: executablePath) else {
             throw SVNError(L10n.text("未找到 SVN。请先运行 brew install subversion，并在设置中指定 svn 可执行文件。"))
         }
-        let authentication = try (repository ?? workingCopy?.repositoryURL).flatMap { try authentication(for: $0) }
+        let scopedAuthentication: SVNAuthentication?
+        if let repository = repository ?? workingCopy?.repositoryURL {
+            scopedAuthentication = try authentication(for: repository)
+        } else {
+            scopedAuthentication = nil
+        }
         return SVNClient(
             executable: URL(fileURLWithPath: executablePath),
-            authentication: authentication,
+            authentication: scopedAuthentication,
             globalIgnores: globalIgnores
         )
     }
