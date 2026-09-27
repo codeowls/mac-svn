@@ -80,6 +80,7 @@ open "dist/Mac SVN.app"
 
 ## 当前功能
 
+- 已有副本深度调整（源码新增，尚未发布）：在工作区“检出深度”菜单选择根目录或已检出的受控子目录，支持全递归、直接子节点、仅文件、仅此项。读取实际深度，预览收缩会移除的本地受控项目；移除范围存在本地修改、未受控、忽略或外部内容时拒绝执行，确认前再次检查状态。操作会更新到最新版本并保存深度，不提交；取消或失败不会回滚已完成的下载和移除。
 - 统一的原生工作台样式；在“显示 → 外观”选择跟随系统、浅色或深色，仅影响此应用。
 - 提交说明可折叠，首次勾选自动展开；折叠保留会话草稿。紧凑列表显示文件类型与状态标签。
 - 历史详情完整显示提交说明、作者和时间；文件名与目录分层显示，支持复制完整路径，差异底部精简为版本范围。
@@ -234,6 +235,7 @@ Version 1.4.0 includes a Finder extension for selected commits, confirmed workin
 - Full revision details show the message, author, and date. File names and directories are separated; full paths can be copied and diff footers show concise revision ranges.
 
 - Open existing working copies or browse a remote repository and check out a selected branch into a new or empty directory. Existing nonempty directories are not overwritten; externals are excluded.
+- Adjust an existing working copy's depth (new in source, not yet released): use the Checkout Depth menu for the root or a checked-out versioned subdirectory. Choose infinity, immediates, files, or empty; review the actual depth and local removals before confirming. Local changes, unversioned or ignored content, and externals in the removal scope block the operation. The scope is rechecked before updating to HEAD and saving the depth. No commit is made; cancellation or failure does not undo completed downloads or removals.
 - Keep recent working copies and repository addresses. Removing a recent entry requires confirmation and does not delete local files.
 - Inspect conflict types, operations, base/incoming revisions, and actual conflict files. Open the working file in its default editor, review the saved result, and explicitly confirm before marking a file-content conflict resolved. Content or conflict changes after review require a new review. SVN status is read back; committing remains a separate action. Property and tree conflicts are read-only and require SVN or a dedicated tool.
 - External three-way merging: choose a tool and save its installation path in Settings → Merge Tools, then launch it from conflict details. CLI presets cover IntelliJ IDEA, VS Code, Beyond Compare, Kaleidoscope, KDiff3, and FileMerge. IDEA launch, cancellation, and saving have been exercised; other presets still require acceptance with the respective applications. Install tools separately; FileMerge requires full Xcode. Conflict identity and all four files are rechecked before launch. Exiting the tool never resolves or commits automatically: save and close its merge window, then review and explicitly confirm in Mac SVN. Ordinary diffs continue to use the built-in viewer.

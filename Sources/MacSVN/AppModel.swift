@@ -119,6 +119,9 @@ final class AppModel: ObservableObject {
     @Published var revertPlan: RevertPlan?
     @Published var directoryIgnoreDraft: DirectoryIgnoreDraft?
     @Published var directoryIgnoreError: String?
+    @Published var depthDirectory: WorkingCopyDepth?
+    @Published var depthChangePlan: DepthChangePlan?
+    @Published var depthChangeError: String?
     @Published var conflictDetails: ConflictDetails?
     @Published var conflictResolutionPlan: ConflictResolutionPlan?
     @Published var conflictError: String?
@@ -318,6 +321,9 @@ final class AppModel: ObservableObject {
         revertPlan = nil
         directoryIgnoreDraft = nil
         directoryIgnoreError = nil
+        depthDirectory = nil
+        depthChangePlan = nil
+        depthChangeError = nil
         conflictDetails = nil
         conflictResolutionPlan = nil
         conflictError = nil
@@ -629,6 +635,68 @@ final class AppModel: ObservableObject {
         var isDirectory: ObjCBool = false
         return FileManager.default.fileExists(atPath: copy.root.appendingPathComponent(path).path, isDirectory: &isDirectory)
             && isDirectory.boolValue
+    }
+
+    /// 正常目录不在变更列表里，通过绑定主窗口的选择器提供子目录入口。
+    func chooseDepthDirectory() {
+        guard !isBusy, let copy = workingCopy, let window = mainWindow else { return }
+        let panel = NSOpenPanel()
+        panel.title = L10n.text("选择目录调整检出深度")
+        panel.prompt = L10n.text("选择目录")
+        panel.directoryURL = copy.root
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.beginSheetModal(for: window) { response in
+            guard response == .OK, let url = panel.url, self.workingCopy?.root == copy.root else { return }
+            let root = copy.root.resolvingSymlinksInPath().path
+            let selected = url.resolvingSymlinksInPath().path
+            guard selected == root || selected.hasPrefix(root + "/") else {
+                self.errorMessage = L10n.text("请选择当前工作副本内的受控目录。")
+                return
+            }
+            self.editWorkingCopyDepth(path: selected == root ? "." : String(selected.dropFirst(root.count + 1)))
+        }
+    }
+
+    func editWorkingCopyDepth(path: String = ".") {
+        guard !isBusy, let copy = workingCopy else { return }
+        perform(L10n.text("读取目录深度")) {
+            let directory = try await self.client().workingCopyDepth(path: path, at: copy.root)
+            try Task.checkCancellation()
+            self.depthChangePlan = nil
+            self.depthChangeError = nil
+            self.depthDirectory = directory
+        }
+    }
+
+    func prepareDepthChange(_ directory: WorkingCopyDepth, depth: CheckoutDepth) {
+        guard !isBusy, depthDirectory == directory, workingCopy?.root == directory.root else { return }
+        depthChangeError = nil
+        perform(L10n.text("检查深度调整范围"), reportFailure: { self.depthChangeError = $0.localizedDescription }) {
+            let plan = try await self.client().prepareDepthChange(path: directory.path, depth: depth, at: directory.root)
+            try Task.checkCancellation()
+            self.depthChangePlan = plan
+        }
+    }
+
+    /// 与普通更新共用实时日志、取消和失败后刷新；关闭预览不会触发写操作。
+    func confirmDepthChange(_ plan: DepthChangePlan) {
+        guard !isBusy, depthChangePlan?.id == plan.id, workingCopy?.root == plan.directory.root else { return }
+        depthDirectory = nil
+        depthChangePlan = nil
+        depthChangeError = nil
+        perform(L10n.text("调整检出深度"), refreshAfterFailure: true, streamOutput: true) {
+            let client = try self.client()
+            try await self.receiveLiveOutput { onOutput in
+                try await client.changeDepth(plan, onOutput: onOutput)
+            }
+            self.writeProgress?.phase = .completed
+            try await self.reload()
+            if self.entries.contains(where: \.isConflict) {
+                self.result += L10n.text("\n更新产生冲突，请点击冲突项目查看详情；处理最终内容后再检查并标记解决。")
+            }
+        }
     }
 
     func chooseDirectoryIgnores() {
@@ -1014,6 +1082,9 @@ final class AppModel: ObservableObject {
         revertPlan = nil
         directoryIgnoreDraft = nil
         directoryIgnoreError = nil
+        depthDirectory = nil
+        depthChangePlan = nil
+        depthChangeError = nil
         conflictDetails = nil
         conflictResolutionPlan = nil
         conflictError = nil

@@ -96,6 +96,9 @@ struct ContentView: View {
         .sheet(item: $model.directoryIgnoreDraft) { draft in
             DirectoryIgnoreView(model: model, draft: draft)
         }
+        .sheet(item: $model.depthDirectory) { directory in
+            WorkingCopyDepthView(model: model, directory: directory)
+        }
         .sheet(item: $model.conflictDetails) { details in
             ConflictView(model: model, details: details).id(details.id)
         }
@@ -361,6 +364,11 @@ struct ContentView: View {
                     Button(L10n.text("选择受控目录…")) { model.chooseDirectoryIgnores() }
                 }
                 .fixedSize().disabled(model.isBusy)
+                Menu(L10n.text("检出深度")) {
+                    Button(L10n.text("调整工作副本根目录…")) { model.editWorkingCopyDepth() }
+                    Button(L10n.text("选择受控目录…")) { model.chooseDepthDirectory() }
+                }
+                .fixedSize().disabled(model.isBusy)
                 Toggle(L10n.text("显示已忽略项"), isOn: Binding(
                     get: { model.showIgnored },
                     set: {
@@ -463,6 +471,8 @@ struct ContentView: View {
                                 .disabled(model.isBusy)
                                 if model.isLocalDirectory(entry.path), !["unversioned", "ignored"].contains(entry.item) {
                                     Button(L10n.text("编辑此目录忽略…")) { model.editDirectoryIgnores(path: entry.path) }
+                                        .disabled(model.isBusy)
+                                    Button(L10n.text("调整检出深度…")) { model.editWorkingCopyDepth(path: entry.path) }
                                         .disabled(model.isBusy)
                                 }
                             }
