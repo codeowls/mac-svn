@@ -1,0 +1,17 @@
+Mac SVN 1.5.0
+
+- 新增已有工作副本的检出深度调整：根目录或已检出的受控子目录可选择全递归、直接子节点、仅文件、仅此项；收缩前展示实际移除范围，保护其中的本地修改、未受控、忽略及外部内容，确认前重新检查。操作更新到 HEAD 并保存深度，不自动提交；取消或失败不会回滚已完成的下载和移除。
+- 新增访达本地状态角标和目录汇总：正常、修改、新增、冲突或异常、未受控五类状态。角标在 Mac SVN 运行期间刷新，绿色只表示本地无修改，不表示与服务器同步；忽略、external、嵌套副本及未扫描内容不标记。读取失败会清除角标并显示错误。
+- 新增首次启动设置引导：说明扩展启用、逐副本添加目录和按需文件访问权限，返回应用后自动读取真实扩展状态。可稍后设置或关闭，并从“设置 → 访达”重新打开；不会自动注册目录或更改系统开关。
+
+同目录的其他 Finder Sync 扩展可能争用角标请求；Mac SVN 不自动调整其他扩展，系统冷启动后的分派顺序仍待核验。
+要求 macOS 14+ 和本机 Subversion 1.14+；安装包包含 Apple Silicon / Intel 架构，支持简体中文和英文。
+本版仍采用 ad-hoc 签名，未进行 Developer ID 签名或 Apple 公证。跨设备及 Intel 实机兼容性尚未验证。
+
+English
+- Adjust checkout depth for an existing working-copy root or checked-out versioned subdirectory. Choose infinity, immediates, files, or empty, and review actual local removals before shrinking. Local changes, unversioned or ignored content, and externals in the removal scope block the operation; confirmation rechecks the scope. The operation updates to HEAD and saves depth without committing. Cancellation or failure does not undo completed downloads or removals.
+- Finder local status badges and directory aggregation for clean, modified, added, conflicted or abnormal, and unversioned items. Badges refresh while Mac SVN is running. Green means no local changes, not server synchronization. Ignored items, externals, nested working copies, and unscanned paths have no badge. Read failures clear badges and report the error.
+- First-launch setup guide for extension activation, individual working-copy registration, and file access requests. Returning to the app automatically reads the actual extension state. Choose Set Up Later or close the guide, then reopen it through Settings → Finder. The guide does not register folders or change system switches automatically.
+
+Other Finder Sync extensions monitoring the same folders may compete for badge requests. Mac SVN does not change their settings; dispatch order after a system cold start remains unverified.
+Requires macOS 14+ and Subversion 1.14+. Universal Apple Silicon / Intel package with Simplified Chinese and English support. Ad-hoc signed, without Developer ID signing or Apple notarization. Cross-device and Intel hardware validation remain pending.

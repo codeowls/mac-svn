@@ -693,3 +693,19 @@
 "上述副本显示菜单和本地状态角标；角标在 Mac SVN 运行期间刷新，绿色仅表示本地无修改。停用不会删除文件。" = "These working copies show menus and local status badges. Badges refresh while Mac SVN is running. Green means no local changes. Disabling does not delete files.";
 "角标状态读取失败：%@\n%@" = "Unable to read badge status: %@\n%@";
 "菜单正常但角标未显示时，请检查其他访达扩展是否监控同一目录。" = "If menus work but badges are missing, check whether other Finder extensions monitor the same directory.";
+
+// First-launch setup guide
+"首次使用设置" = "First-Time Setup";
+"访达集成可显示右键菜单和本地状态角标。请按下面两步完成设置，也可以稍后再设置。" = "Finder integration adds context menus and local status badges. Follow these two steps to set it up, or do it later.";
+"1. 启用访达扩展" = "1. Enable the Finder Extension";
+"点击“管理访达扩展”，在系统设置中开启 Mac SVN，然后点击系统设置里的“完成”。" = "Click Manage Finder Extensions, enable Mac SVN in System Settings, then click Done in System Settings.";
+"2. 添加工作副本" = "2. Add a Working Copy";
+"在主窗口打开或检出工作副本，再到“设置 → 访达”点击“添加当前工作副本”。每个副本需要单独添加。" = "Open or check out a working copy in the main window, then choose Add Current Working Copy in Settings → Finder. Add each copy separately.";
+"打开应用设置" = "Open App Settings";
+"目录访问" = "Folder Access";
+"访问文稿、桌面等受保护目录时，macOS 可能按需询问文件访问权限。" = "macOS may ask for file access when you open protected folders such as Documents or Desktop.";
+"访达功能无需辅助功能或屏幕录制权限。角标在 Mac SVN 运行期间刷新，绿色仅表示本地无修改。" = "Finder features do not require Accessibility or Screen Recording permission. Badges refresh while Mac SVN is running; green only means no local changes.";
+"稍后设置" = "Set Up Later";
+"开始使用" = "Get Started";
+"查看启动引导" = "Show Setup Guide";
+"访达集成为可选功能；稍后设置不影响主工作区使用。" = "Finder integration is optional. You can use the main workspace before setting it up.";

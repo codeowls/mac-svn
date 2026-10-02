@@ -30,13 +30,13 @@ Real screenshots of the app using a local demo repository and the author `demo`.
 
 ## 简体中文
 
-当前版本为 **1.4.0**，面向日常 SVN 工作副本管理。源码采用 MIT 协议；应用尚未完成正式签名、公证和跨设备兼容性验证。
+当前版本为 **1.5.0**，面向日常 SVN 工作副本管理。源码采用 MIT 协议；应用尚未完成正式签名、公证和跨设备兼容性验证。
 
 ## 下载与安装
 
-前往 [GitHub Releases](https://github.com/codeowls/mac-svn/releases/latest) 下载，或直接选择 **1.4.0** 安装包：
+前往 [GitHub Releases](https://github.com/codeowls/mac-svn/releases/latest) 下载，或直接选择 **1.5.0** 安装包：
 
-- [DMG 安装包（推荐）](https://github.com/codeowls/mac-svn/releases/download/v1.4.0/Mac-SVN-1.4.0-universal.dmg)：打开后将 **Mac SVN.app** 拖入 **Applications（应用程序）**。
+- [DMG 安装包（推荐）](https://github.com/codeowls/mac-svn/releases/download/v1.5.0/Mac-SVN-1.5.0-universal.dmg)：打开后将 **Mac SVN.app** 拖入 **Applications（应用程序）**。
 
 安装包要求 **macOS 14+**，同时包含 **Apple Silicon / Intel** 架构，无需安装 Swift 或 Xcode。已在 Apple Silicon 验收；Intel 已完成构建，尚未进行 Intel 实机验收。App 仍需本机 **Subversion 1.14+**；已安装 Homebrew 时运行 `brew install subversion`，启动后可在设置中检测或指定 SVN 路径。应用支持简体中文和英文，可在设置中切换，重启后生效。
 
@@ -66,7 +66,7 @@ open "dist/Mac SVN.app"
 
 构建脚本默认将 SwiftPM 并行任务数和编译器线程数均设为 2，以降低本机负载；这不是严格的 CPU 占用上限。可用 `SWIFT_BUILD_JOBS=1 bash scripts/build-app.sh` 进一步降低并发，或按需增加该正整数。通用包的两个架构依次构建，`package-release.sh` 也沿用此设置。正式安装包可由下述 GitHub Actions 发布流程构建，无需在本机重复打包。
 
-运行 `bash scripts/package-release.sh` 生成通用架构 DMG 和本地 SHA256 校验文件，输出到 `dist/releases/1.4.0/`；已有同版本输出时拒绝覆盖。维护者更新 `VERSION` 及 `release-notes/<版本>.txt` 后推送对应 `v<版本>` 标签，发布工作流会校验标签、构建验证安装包、上传附件后公开 Release。
+运行 `bash scripts/package-release.sh` 生成通用架构 DMG 和本地 SHA256 校验文件，输出到 `dist/releases/1.5.0/`；已有同版本输出时拒绝覆盖。维护者更新 `VERSION` 及 `release-notes/<版本>.txt` 后推送对应 `v<版本>` 标签，发布工作流会校验标签、构建验证安装包、上传附件后公开 Release。
 
 打包时自动生成并嵌入原生 App 图标；源图和图标说明位于 [`assets/`](assets/README.md)。通过打包后的 `.app` 启动可使用该图标。打包脚本会刷新该 App 的 Launch Services 注册，启动时重新载入 Dock 图标；重建后请退出旧进程再打开 `dist/Mac SVN.app`。`swift run` 是裸可执行文件调试入口，不包含 `.app` 的图标和语言声明。
 
@@ -76,13 +76,15 @@ open "dist/Mac SVN.app"
 
 ## 访达集成
 
-1.4.0 安装包包含访达扩展，可从右键菜单提交所选项目、确认更新整个工作副本、查看差异和历史。请在“设置 → 访达”启用扩展并添加当前工作副本。详见[启用步骤与操作范围](docs/FINDER.md)。
+1.5.0 安装包包含访达扩展，可从右键菜单提交所选项目、确认更新整个工作副本、查看差异和历史。请在“设置 → 访达”启用扩展并添加当前工作副本。详见[启用步骤与操作范围](docs/FINDER.md)。
 
-当前源码构建增加本地状态角标及目录汇总，在 Mac SVN 运行期间刷新。绿色表示本地无修改，橙色表示修改，蓝色表示新增，红色表示冲突或异常，灰色表示未受控；忽略及未扫描项目不标记。
+1.5.0 新增首次启动引导，说明扩展启用、工作副本添加及按需目录访问授权，并读取实际扩展状态。可选择“稍后设置”，以后从“设置 → 访达 → 查看启动引导”重新打开；引导不会自动添加目录，稍后设置不影响主工作区使用。
+
+1.5.0 新增本地状态角标及目录汇总，在 Mac SVN 运行期间刷新。绿色表示本地无修改，不代表已更新到服务器最新版本；橙色表示修改，蓝色表示新增，红色表示冲突或异常，灰色表示未受控。忽略及未扫描项目不标记，同目录的其他访达扩展可能影响角标显示。
 
 ## 当前功能
 
-- 已有副本深度调整（源码新增，尚未发布）：在工作区“检出深度”菜单选择根目录或已检出的受控子目录，支持全递归、直接子节点、仅文件、仅此项。读取实际深度，预览收缩会移除的本地受控项目；移除范围存在本地修改、未受控、忽略或外部内容时拒绝执行，确认前再次检查状态。操作会更新到最新版本并保存深度，不提交；取消或失败不会回滚已完成的下载和移除。
+- 已有副本深度调整（1.5.0 新增）：在工作区“检出深度”菜单选择根目录或已检出的受控子目录，支持全递归、直接子节点、仅文件、仅此项。读取实际深度，预览收缩会移除的本地受控项目；移除范围存在本地修改、未受控、忽略或外部内容时拒绝执行，确认前再次检查状态。操作会更新到最新版本并保存深度，不提交；取消或失败不会回滚已完成的下载和移除。
 - 统一的原生工作台样式；在“显示 → 外观”选择跟随系统、浅色或深色，仅影响此应用。
 - 提交说明可折叠，首次勾选自动展开；折叠保留会话草稿。紧凑列表显示文件类型与状态标签。
 - 历史详情完整显示提交说明、作者和时间；文件名与目录分层显示，支持复制完整路径，差异底部精简为版本范围。
@@ -185,15 +187,15 @@ scripts/build-app.sh  本地 .app 打包
 
 ## English
 
-**Version 1.4.0.** Mac SVN is a native SwiftUI client for everyday Subversion work. Source code is available under the MIT License. The app has not yet completed release signing, notarization, or cross-device compatibility validation.
+**Version 1.5.0.** Mac SVN is a native SwiftUI client for everyday Subversion work. Source code is available under the MIT License. The app has not yet completed release signing, notarization, or cross-device compatibility validation.
 
 ### Download and install
 
-Visit [GitHub Releases](https://github.com/codeowls/mac-svn/releases/latest), or download **1.4.0** directly:
+Visit [GitHub Releases](https://github.com/codeowls/mac-svn/releases/latest), or download **1.5.0** directly:
 
-- [DMG installer (recommended)](https://github.com/codeowls/mac-svn/releases/download/v1.4.0/Mac-SVN-1.4.0-universal.dmg): open it and drag **Mac SVN.app** into **Applications**.
+- [DMG installer (recommended)](https://github.com/codeowls/mac-svn/releases/download/v1.5.0/Mac-SVN-1.5.0-universal.dmg): open it and drag **Mac SVN.app** into **Applications**.
 
-Requires **macOS 14+** and local **Subversion 1.14+**. Both **Apple Silicon and Intel** architectures are included; Swift/Xcode is not required. Apple Silicon runtime checks passed; Intel is built but has not been tested on physical Intel hardware. With Homebrew already installed, run `brew install subversion`; the SVN path can be selected in app Settings. The app interface is Simplified Chinese.
+Requires **macOS 14+** and local **Subversion 1.14+**. Both **Apple Silicon and Intel** architectures are included; Swift/Xcode is not required. Apple Silicon runtime checks passed; Intel is built but has not been tested on physical Intel hardware. With Homebrew already installed, run `brew install subversion`; the SVN path can be selected in app Settings. The app supports Simplified Chinese and English; change the language in Settings and restart.
 
 **Signing:** this release is ad-hoc signed, without Developer ID signing or Apple notarization. macOS may block its first launch. Verify the download source, then follow [Apple's official guidance](https://support.apple.com/102445). Do not disable Gatekeeper system-wide.
 
@@ -222,18 +224,21 @@ The script builds for the local architecture, embeds the app icon and language d
 
 Build scripts default to 2 SwiftPM jobs and 2 compiler threads to reduce local load; this is not a strict CPU usage cap. Use `SWIFT_BUILD_JOBS=1 bash scripts/build-app.sh` to reduce concurrency further, or choose another positive integer. Universal builds process architectures sequentially, and `package-release.sh` inherits the same setting. The GitHub Actions release workflow can build distribution packages without repeating that work locally.
 
-Use `bash scripts/build-app.sh --universal` for both architectures, or `bash scripts/package-release.sh` to produce DMG and local checksums in `dist/releases/1.4.0/`. Existing release output is not overwritten. The version comes from `VERSION`; packages use ad-hoc signing without Developer ID signing or Apple notarization. Running `swift run` starts a bare executable without the bundle's icon and language configuration.
+Use `bash scripts/build-app.sh --universal` for both architectures, or `bash scripts/package-release.sh` to produce DMG and local checksums in `dist/releases/1.5.0/`. Existing release output is not overwritten. The version comes from `VERSION`; packages use ad-hoc signing without Developer ID signing or Apple notarization. Running `swift run` starts a bare executable without the bundle's icon and language configuration.
 
 Liquid Glass appearance requires a macOS 26+ SDK and macOS 26+ at runtime; the minimum deployment target remains macOS 14. The build script records the actual linked SDK. CI uses Xcode 16.4 and checks the compatibility build, not Liquid Glass appearance.
 
 ### Finder integration
 
-Version 1.4.0 includes a Finder extension for selected commits, confirmed working-copy updates, diffs, and history. Enable it through **Settings → Finder** and add the current working copy. See [setup and operation scope](docs/FINDER.md).
+Version 1.5.0 includes a Finder extension for selected commits, confirmed working-copy updates, diffs, and history. Enable it through **Settings → Finder** and add the current working copy. See [setup and operation scope](docs/FINDER.md).
 
-Current source builds add local status badges and directory aggregation while Mac SVN is running: green for no local changes, orange for modifications, blue for additions, red for conflicts or abnormal states, and gray for unversioned items. Ignored and unscanned paths remain unbadged.
+Version 1.5.0 adds a first-launch setup guide. It explains extension activation, working-copy registration, and file access requests, and reads the actual extension state. Choose **Set Up Later** to use the main workspace now, then reopen it through **Settings → Finder → Show Setup Guide**. The guide does not register folders automatically.
+
+Version 1.5.0 adds local status badges and directory aggregation while Mac SVN is running: green for no local changes, orange for modifications, blue for additions, red for conflicts or abnormal states, and gray for unversioned items. Green does not indicate synchronization with the server. Ignored and unscanned paths remain unbadged, and other Finder extensions monitoring the same directory may affect badge display.
 
 ### Features
 
+- Adjust the depth of an existing working copy (new in 1.5.0): select its root or a checked-out versioned directory from the Checkout depth menu, then choose recursive, immediate children, files only, or the directory alone. Preview versioned items that a reduction would remove; local changes, unversioned, ignored, or external content block removal, and status is checked again before applying. The operation updates to the latest revision and saves the depth without committing. Cancellation or failure does not roll back completed downloads or removals.
 - Consistent native workspace styling with System, Light, and Dark appearance options in the View menu.
 - Collapsible commit messages preserve session drafts and expand when files are first selected. Compact file rows show type icons and status badges.
 - Full revision details show the message, author, and date. File names and directories are separated; full paths can be copied and diff footers show concise revision ranges.

@@ -59,6 +59,7 @@ struct MacSVNApp: App {
                 .frame(minWidth: 1000, minHeight: 680)
                 .preferredColorScheme(preferredColorScheme)
                 .modifier(FinderInboxPresenter(delegate: delegate, model: model))
+                .modifier(StartupGuidePresenter())
         }
         .defaultSize(width: 1250, height: 800)
         .commands {
@@ -84,6 +85,14 @@ struct MacSVNApp: App {
                     .disabled(model.isBusy || model.workingCopy == nil)
             }
         }
+        Window(L10n.text("首次使用设置"), id: StartupGuide.windowID) {
+            StartupGuideView()
+                .environment(\.locale, L10n.language.locale)
+                .preferredColorScheme(preferredColorScheme)
+        }
+        .defaultPosition(.center)
+        .windowResizability(.contentSize)
+
         Settings {
             SettingsView(model: model)
                 .environment(\.locale, L10n.language.locale)

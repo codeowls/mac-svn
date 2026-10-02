@@ -1,11 +1,19 @@
 # 访达集成 / Finder integration
 
-本功能包含在 1.3.0 及更新安装包中，也可从源码构建。
-This feature is included in version 1.3.0 and later, and in source builds.
+访达菜单包含在 1.3.0 及更新安装包中，也可从源码构建。1.5.0 新增本地状态角标与首次启动引导。
+Finder menus are included in version 1.3.0 and later, and in source builds. Version 1.5.0 adds local status badges and a first-launch setup guide.
+
+## 首次启动引导（1.5.0 新增）
+
+1.5.0 在首次启动时显示独立的设置引导，说明如何启用访达扩展和添加工作副本。点击“稍后设置”或关闭窗口后，不再自动弹出；可随时从“设置 → 访达 → 查看启动引导”重新打开。访达集成为可选功能，稍后设置不影响主工作区使用。
+
+“管理访达扩展”打开系统扩展管理，由用户启用 Mac SVN。返回应用或点击“重新检查”会读取实际启用状态；扩展启用后，“开始使用”才可点击。引导不会自动添加目录：先在主窗口打开或检出工作副本，再通过“打开应用设置”进入设置，选择“访达”并添加当前副本。
+
+访问文稿、桌面等受保护目录时，macOS 可能按需询问文件访问权限。访达功能无需辅助功能或屏幕录制权限。
 
 ## 启用
 
-1. 安装并打开 Mac SVN 1.3.0 或更新版本；从源码运行时，使用 `bash scripts/build-app.sh` 构建并打开 `dist/Mac SVN.app`。裸 `swift run` 不包含访达扩展。
+1. 安装并打开 Mac SVN 1.5.0 或更新版本；从源码运行时，使用 `bash scripts/build-app.sh` 构建并打开 `dist/Mac SVN.app`。裸 `swift run` 不包含访达扩展。
 2. 打开本地 SVN 工作副本，进入“设置 → 访达”。
 3. 点击“管理访达扩展”，在系统界面启用 Mac SVN。
 4. 点击“添加当前工作副本”。“扩展已接收目录配置”表示已收到扩展的同步回执；未收到时，确认扩展已启用，再点击“检查并同步”。
@@ -26,7 +34,7 @@ This feature is included in version 1.3.0 and later, and in source builds.
 
 ## 本地状态角标
 
-当前源码构建新增角标，显示在已注册副本的可见文件及目录上：
+1.5.0 新增角标，显示在已注册副本的可见文件及目录上：
 
 | 角标 | 本地状态 |
 | --- | --- |
@@ -50,6 +58,10 @@ This feature is included in version 1.3.0 and later, and in source builds.
 
 ## English
 
+Version 1.5.0 adds a first-launch setup guide. The guide explains how to enable the Finder extension and add a working copy. Choosing **Set Up Later** or closing its window stops automatic reminders. Reopen it through **Settings → Finder → Show Setup Guide** at any time. Finder integration is optional, so setup can wait while you use the main workspace.
+
+**Manage Finder Extensions** opens system extension management for you to enable Mac SVN. Returning to the app or choosing **Check Again** reads the actual enabled state. **Get Started** becomes available after the extension is enabled. The guide does not register folders automatically: open or check out a working copy in the main window, choose **Open App Settings**, then select **Finder** and add the current copy. macOS may request file access for protected folders such as Documents or Desktop. Finder features do not require Accessibility or Screen Recording permission.
+
 Build the app with `bash scripts/build-app.sh`, open a working copy, then use **Settings → Finder**. Enable Mac SVN through **Manage Finder Extensions**, then choose **Add Current Working Copy**. If configuration has not been acknowledged, enable the extension and select **Check and Sync**.
 
 Right-click a file, folder, or folder background within a registered working copy:
@@ -61,7 +73,7 @@ Right-click a file, folder, or folder background within a registered working cop
 
 Selections spanning multiple working copies are rejected. Requests are queued without replacing the current form. Main-workspace drafts are preserved. Authentication, SVN configuration, cancellation, and error handling use the host application; failed writes are never retried automatically.
 
-Current source builds add local status badges: green for no local changes, orange for content/property changes or scheduled deletion/replacement, blue for scheduled additions/copies, red for conflicts or abnormal states, and gray for unversioned items. Green does not indicate synchronization with the server. Directories aggregate scanned descendants by conflict, modification, addition, unversioned, then clean priority. Ignored items, externals, nested working copies, metadata, and unscanned paths have no badge; register external or nested copies separately.
+Version 1.5.0 adds local status badges: green for no local changes, orange for content/property changes or scheduled deletion/replacement, blue for scheduled additions/copies, red for conflicts or abnormal states, and gray for unversioned items. Green does not indicate synchronization with the server. Directories aggregate scanned descendants by conflict, modification, addition, unversioned, then clean priority. Ignored items, externals, nested working copies, metadata, and unscanned paths have no badge; register external or nested copies separately.
 
 Badges refresh while Mac SVN is running. The host queries local SVN status, uses file events to invalidate shared snapshots, and reports scan errors in Settings. The extension requests only visible paths and never runs SVN or reads file contents. Quitting clears badges; cached states expire within 20 seconds after an abnormal exit. There is no standalone background status service yet.
 

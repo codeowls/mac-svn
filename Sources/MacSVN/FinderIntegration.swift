@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import FinderSync
 import SwiftUI
 import SVNCore
@@ -8,6 +9,7 @@ import SVNCore
 final class FinderIntegration: NSObject, ObservableObject {
     static let shared = FinderIntegration()
     @Published private(set) var roots: [String]
+    @Published private(set) var extensionEnabled = FIFinderSyncController.isExtensionEnabled
     @Published private(set) var synchronized = false
     @Published var error: String?
 
@@ -68,24 +70,61 @@ final class FinderIntegration: NSObject, ObservableObject {
         UserDefaults.standard.set(roots, forKey: "finderWorkingCopies")
         publish()
     }
+
+    /// 系统设置由用户操作；返回应用后重新读取实际开关，并同步已有目录。
+    func checkAndSync() {
+        extensionEnabled = FIFinderSyncController.isExtensionEnabled
+        publish()
+    }
+
+    /// 系统开关的传播可能晚于应用激活；只在实际状态改变时重新发布目录。
+    func updateExtensionState() {
+        let enabled = FIFinderSyncController.isExtensionEnabled
+        if enabled != extensionEnabled {
+            extensionEnabled = enabled
+            publish()
+        }
+    }
 }
 
+/// 可见引导和设置页共享读回机制，关闭窗口后不再轮询。
+@MainActor
+struct FinderExtensionStatusObserver: ViewModifier {
+    @ObservedObject private var integration = FinderIntegration.shared
+    @ViewState private var visible = false
+    private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+
+    func body(content: Content) -> some View {
+        content
+            .onAppear {
+                visible = true
+                integration.checkAndSync()
+            }
+            .onDisappear { visible = false }
+            .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+                if visible { integration.checkAndSync() }
+            }
+            .onReceive(timer) { _ in
+                if visible { integration.updateExtensionState() }
+            }
+    }
+}
+
+@MainActor
 struct FinderIntegrationSettings: View {
     @ObservedObject var model: AppModel
     @ObservedObject private var integration = FinderIntegration.shared
     @ObservedObject private var badges = FinderBadgeService.shared
-    @ViewState private var enabled = FIFinderSyncController.isExtensionEnabled
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(L10n.text("访达集成")).font(.headline)
-            Text(enabled ? L10n.text("访达扩展已启用") : L10n.text("请在系统设置中启用 Mac SVN 访达扩展。"))
+            Text(integration.extensionEnabled ? L10n.text("访达扩展已启用") : L10n.text("请在系统设置中启用 Mac SVN 访达扩展。"))
             HStack {
                 Button(L10n.text("管理访达扩展")) { FIFinderSyncController.showExtensionManagementInterface() }
-                Button(L10n.text("检查并同步")) {
-                    enabled = FIFinderSyncController.isExtensionEnabled
-                    integration.publish()
-                }
+                Button(L10n.text("检查并同步")) { integration.checkAndSync() }
+                Button(L10n.text("查看启动引导")) { openWindow(id: StartupGuide.windowID) }
             }
             Text(integration.synchronized ? L10n.text("扩展已接收目录配置") : L10n.text("等待扩展接收配置；启用后可再次同步。"))
                 .font(.caption).foregroundStyle(.secondary)
@@ -113,5 +152,6 @@ struct FinderIntegrationSettings: View {
             }
             if let error = integration.error { Text(error).foregroundStyle(.red) }
         }
+        .modifier(FinderExtensionStatusObserver())
     }
 }
