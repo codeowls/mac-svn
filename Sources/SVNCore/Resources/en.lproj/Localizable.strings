@@ -687,3 +687,9 @@
 "选择目录调整检出深度" = "Choose a Directory to Adjust Checkout Depth";
 "取消操作" = "Cancel Operation";
 "缩小范围包含外部文件：%@。请先单独处理外部引用。" = "The reduced scope contains an external file: %@. Manage the external separately first.";
+
+// Finder local status badges
+"请选择工作副本根目录启用访达集成。" = "Choose a working copy root to enable Finder integration.";
+"上述副本显示菜单和本地状态角标；角标在 Mac SVN 运行期间刷新，绿色仅表示本地无修改。停用不会删除文件。" = "These working copies show menus and local status badges. Badges refresh while Mac SVN is running. Green means no local changes. Disabling does not delete files.";
+"角标状态读取失败：%@\n%@" = "Unable to read badge status: %@\n%@";
+"菜单正常但角标未显示时，请检查其他访达扩展是否监控同一目录。" = "If menus work but badges are missing, check whether other Finder extensions monitor the same directory.";

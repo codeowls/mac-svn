@@ -16,7 +16,8 @@ for architecture in "$@"; do
         -sdk "$SDK_PATH" -target "$architecture-apple-macosx14.0" \
         -module-name MacSVNFinder -framework AppKit -framework FinderSync \
         -Xlinker -e -Xlinker _NSExtensionMain \
-        Sources/SVNCore/FinderConfiguration.swift Extensions/FinderSync/FinderSync.swift -o "$BINARY"
+        Sources/SVNCore/FinderConfiguration.swift Sources/SVNCore/FinderBadge.swift \
+        Extensions/FinderSync/FinderBadgeController.swift Extensions/FinderSync/FinderSync.swift -o "$BINARY"
     BINARIES+=("$BINARY")
 done
 lipo -create "${BINARIES[@]}" -output "$EXTENSION_DIR/Contents/MacOS/MacSVNFinder"

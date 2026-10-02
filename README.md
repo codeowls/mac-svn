@@ -78,6 +78,8 @@ open "dist/Mac SVN.app"
 
 1.4.0 安装包包含访达扩展，可从右键菜单提交所选项目、确认更新整个工作副本、查看差异和历史。请在“设置 → 访达”启用扩展并添加当前工作副本。详见[启用步骤与操作范围](docs/FINDER.md)。
 
+当前源码构建增加本地状态角标及目录汇总，在 Mac SVN 运行期间刷新。绿色表示本地无修改，橙色表示修改，蓝色表示新增，红色表示冲突或异常，灰色表示未受控；忽略及未扫描项目不标记。
+
 ## 当前功能
 
 - 已有副本深度调整（源码新增，尚未发布）：在工作区“检出深度”菜单选择根目录或已检出的受控子目录，支持全递归、直接子节点、仅文件、仅此项。读取实际深度，预览收缩会移除的本地受控项目；移除范围存在本地修改、未受控、忽略或外部内容时拒绝执行，确认前再次检查状态。操作会更新到最新版本并保存深度，不提交；取消或失败不会回滚已完成的下载和移除。
@@ -151,7 +153,7 @@ bash scripts/create-demo.sh
 - 密码默认仅保留在本次会话，按验证成功的仓库根路径隔离。勾选“记住密码”后保存到本机 macOS 钥匙串，下次访问该仓库时读取；取消勾选并成功登录会清除该仓库之前保存的密码。账号窗口提供退出并清除入口，只处理本应用的会话和钥匙串条目，不清除系统 SVN 认证缓存。
 - 密码通过标准输入传递，不放入进程参数、不写入 UserDefaults 或 SVN 认证缓存。未在 App 登录的仓库仍使用本机 SVN 已配置的认证缓存、代理和证书，因此退出 App 账号后系统配置仍可能提供认证。
 - 所有命令使用 `--non-interactive`，不静默信任证书；URL 不允许包含密码。显式登录使用 SVN 1.14+ 的 `--password-from-stdin`。
-- 尚未内置 SVN 引擎、文件状态角标、三方合并编辑器或文件锁管理。
+- 尚未内置 SVN 引擎、主应用关闭后的角标后台服务、三方合并编辑器或文件锁管理。
 - 检出、状态扫描和更新使用 `--ignore-externals`；外部工作副本需单独打开管理。
 - 还原暂不支持冲突、移动两端，以及删除／缺失／替换／带历史复制的目录。目录属性只还原自身，不递归处理子项；普通新增目录必须同时选中其已受控子项。
 - 同一窗口内写操作串行执行；不要与终端或其他客户端同时修改同一个工作副本。
@@ -228,6 +230,8 @@ Liquid Glass appearance requires a macOS 26+ SDK and macOS 26+ at runtime; the m
 
 Version 1.4.0 includes a Finder extension for selected commits, confirmed working-copy updates, diffs, and history. Enable it through **Settings → Finder** and add the current working copy. See [setup and operation scope](docs/FINDER.md).
 
+Current source builds add local status badges and directory aggregation while Mac SVN is running: green for no local changes, orange for modifications, blue for additions, red for conflicts or abnormal states, and gray for unversioned items. Ignored and unscanned paths remain unbadged.
+
 ### Features
 
 - Consistent native workspace styling with System, Light, and Dark appearance options in the View menu.
@@ -283,7 +287,7 @@ Directory rules are stored in `svn:ignore`, one name or pattern per line. They a
 - Passwords are passed through standard input using `--password-from-stdin`, with `--no-auth-cache`; they are not stored in UserDefaults or command-line arguments.
 - Without an app login, SVN uses its existing local authentication cache, proxy, and certificate configuration. Commands are noninteractive and do not silently trust certificates. URLs containing passwords are rejected.
 - Recent paths, repository addresses, and SVN settings are stored locally in UserDefaults. They are not part of this source repository.
-- There is no bundled SVN engine, file status badges, three-way merge editor, or file-lock management yet.
+- There is no bundled SVN engine, standalone badge service while the app is closed, three-way merge editor, or file-lock management yet.
 - Externals and nested working copies are managed separately. Revert does not currently support conflicts, move pairs, or deleted/missing/replaced/copied directories.
 - Writes are serialized within one window. Do not modify the same working copy concurrently from another client.
 - Cancellation does not roll back completed work. Failed or cancelled checkout can leave a partial directory. If a commit result is unclear, inspect repository history before retrying.

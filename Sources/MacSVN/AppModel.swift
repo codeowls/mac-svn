@@ -244,6 +244,7 @@ final class AppModel: ObservableObject {
 
     /// Refresh the visible copy after Finder writes without changing its draft or switching repositories.
     func refreshAfterFinderWrite(at root: URL) async throws {
+        FinderBadgeService.shared.invalidate(root.resolvingSymlinksInPath().path)
         guard workingCopy?.root.resolvingSymlinksInPath() == root.resolvingSymlinksInPath() else { return }
         try await reload()
     }
@@ -1039,6 +1040,7 @@ final class AppModel: ObservableObject {
             UserDefaults.standard.removeObject(forKey: "svnGlobalIgnores")
         }
         selectedPaths = []
+        FinderIntegration.shared.publish()
         if workingCopy != nil {
             refresh()
         }
@@ -1117,6 +1119,7 @@ final class AppModel: ObservableObject {
         let newInfo = try await client.workingCopy(at: copy.root)
         entries = newEntries
         workingCopy = newInfo
+        FinderBadgeService.shared.invalidate(copy.root.resolvingSymlinksInPath().path)
         selectedPaths.formIntersection(selectablePaths(in: entries))
         let filter = historyFilter
         let path = historyPath

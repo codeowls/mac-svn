@@ -8,6 +8,17 @@ final class MacSVNFinderSync: FIFinderSync {
     private var selection: [URL] = []
     private var configuration = FinderConfiguration(roots: [], language: "zh-Hans")
     private let actions = ["open", "commit", "update", "diff", "history"]
+    private let badges = makeBadgeController()
+
+    /// Finder 回调没有主线程隔离声明，角标控制器的 AppKit 状态统一交给主线程。
+    private static func makeBadgeController() -> FinderBadgeController {
+        if Thread.isMainThread {
+            return MainActor.assumeIsolated { FinderBadgeController() }
+        }
+        return DispatchQueue.main.sync {
+            MainActor.assumeIsolated { FinderBadgeController() }
+        }
+    }
 
     override init() {
         super.init()
@@ -44,7 +55,31 @@ final class MacSVNFinderSync: FIFinderSync {
     }
 
     private func apply() {
-        FIFinderSyncController.default().directoryURLs = Set(configuration.roots.map { URL(fileURLWithPath: $0) })
+        let configuration = configuration
+        let apply: @MainActor @Sendable () -> Void = { [badges] in
+            badges.configure(configuration)
+            FIFinderSyncController.default().directoryURLs = Set(configuration.roots.map {
+                URL(fileURLWithPath: FinderBadgeRequest.monitoringPath(for: $0))
+            })
+        }
+        // 在扩展初始化返回前完成图像与目录注册。
+        if Thread.isMainThread {
+            MainActor.assumeIsolated { apply() }
+        } else {
+            DispatchQueue.main.sync { MainActor.assumeIsolated { apply() } }
+        }
+    }
+
+    override func beginObservingDirectory(at url: URL) {
+        DispatchQueue.main.async { [badges] in badges.beginObserving(url) }
+    }
+
+    override func endObservingDirectory(at url: URL) {
+        DispatchQueue.main.async { [badges] in badges.endObserving(url) }
+    }
+
+    override func requestBadgeIdentifier(for url: URL) {
+        DispatchQueue.main.async { [badges] in badges.request(url) }
     }
 
     override func menu(for menuKind: FIMenuKind) -> NSMenu? {

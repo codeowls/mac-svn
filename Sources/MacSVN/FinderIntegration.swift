@@ -3,7 +3,7 @@ import FinderSync
 import SwiftUI
 import SVNCore
 
-/// Host preferences are authoritative. Extension acknowledgments only describe menu synchronization.
+/// Host preferences are authoritative. Acknowledgments describe directory configuration, not badge status.
 @MainActor
 final class FinderIntegration: NSObject, ObservableObject {
     static let shared = FinderIntegration()
@@ -34,6 +34,11 @@ final class FinderIntegration: NSObject, ObservableObject {
 
     func publish() {
         synchronized = false
+        FinderBadgeService.shared.configure(
+            roots: roots,
+            executable: UserDefaults.standard.string(forKey: "svnExecutable") ?? SVNClient.discoverExecutable()?.path ?? "",
+            globalIgnores: UserDefaults.standard.string(forKey: "svnGlobalIgnores")
+        )
         do {
             let value = try configuration.encoded()
             DistributedNotificationCenter.default().postNotificationName(
@@ -68,6 +73,7 @@ final class FinderIntegration: NSObject, ObservableObject {
 struct FinderIntegrationSettings: View {
     @ObservedObject var model: AppModel
     @ObservedObject private var integration = FinderIntegration.shared
+    @ObservedObject private var badges = FinderBadgeService.shared
     @ViewState private var enabled = FIFinderSyncController.isExtensionEnabled
 
     var body: some View {
@@ -97,8 +103,14 @@ struct FinderIntegrationSettings: View {
             Button(L10n.text("添加当前工作副本")) {
                 if let root = model.workingCopy?.root { integration.add(root) }
             }.disabled(model.workingCopy == nil || model.isBusy)
-            Text(L10n.text("仅在上述工作副本中显示菜单；停用不会删除本地文件。"))
+            Text(L10n.text("上述副本显示菜单和本地状态角标；角标在 Mac SVN 运行期间刷新，绿色仅表示本地无修改。停用不会删除文件。"))
                 .font(.caption).foregroundStyle(.secondary)
+            Text(L10n.text("菜单正常但角标未显示时，请检查其他访达扩展是否监控同一目录。"))
+                .font(.caption).foregroundStyle(.secondary)
+            ForEach(badges.errors.keys.sorted(), id: \.self) { root in
+                Text(L10n.text("角标状态读取失败：%@\n%@", root, badges.errors[root] ?? ""))
+                    .font(.caption).foregroundStyle(.red).textSelection(.enabled)
+            }
             if let error = integration.error { Text(error).foregroundStyle(.red) }
         }
     }
