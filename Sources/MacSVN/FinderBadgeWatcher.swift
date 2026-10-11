@@ -1,7 +1,7 @@
 import CoreServices
 import Foundation
 
-/// 一个注册副本对应一个事件流；包括 .svn 元数据变化，回调只负责使缓存失效。
+/// 观察副本文件及 .svn 元数据变化；调用方负责合并事件和重新读取状态。
 @MainActor
 final class FinderBadgeWatcher {
     private var stream: FSEventStreamRef?

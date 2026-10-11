@@ -153,6 +153,9 @@ struct ContentView: View {
             Text(L10n.text("%@\n\n仅移除最近记录，不会删除本地文件。该副本的会话草稿将被清除；如果当前已打开，也会关闭其工作区。", path))
         }
         .onChange(of: model.focusedPath) { _, _ in model.loadDiff() }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            model.requestAutomaticRefresh()
+        }
         .onChange(of: model.selectedPaths) { previous, current in
             // 首次勾选时展开；取消选择不收起正在编辑的说明。
             if previous.isEmpty && !current.isEmpty { commitExpanded = true }
@@ -279,6 +282,7 @@ struct ContentView: View {
                         .lineLimit(1)
                         .truncationMode(.middle)
                     Label(copy.repositoryURL, systemImage: "point.topleft.down.to.point.bottomright.curvepath")
+                        .id(copy.repositoryURL)
                         .font(.caption).foregroundStyle(.secondary)
                         .textSelection(.enabled).lineLimit(1).truncationMode(.middle)
                 }
@@ -382,6 +386,18 @@ struct ContentView: View {
             }
             .padding(12)
             .background(Color.primary.opacity(0.025))
+            if let error = model.automaticRefreshError {
+                HStack {
+                    Label(L10n.text("自动刷新失败：%@", error), systemImage: "exclamationmark.triangle")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .textSelection(.enabled)
+                    Spacer()
+                    Button(L10n.text("刷新")) { model.requestAutomaticRefresh() }
+                        .disabled(model.isBusy)
+                }
+                .padding(12)
+            }
             Divider()
             if model.entries.isEmpty {
                 ContentUnavailableView(L10n.text("工作副本干净"), systemImage: "checkmark.circle", description: Text(L10n.text("当前没有本地变更")))

@@ -709,3 +709,4 @@
 "开始使用" = "Get Started";
 "查看启动引导" = "Show Setup Guide";
 "访达集成为可选功能；稍后设置不影响主工作区使用。" = "Finder integration is optional. You can use the main workspace before setting it up.";
+"自动刷新失败：%@" = "Automatic refresh failed: %@";

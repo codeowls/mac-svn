@@ -101,6 +101,7 @@ final class AppModel: ObservableObject {
     @Published var operation = ""
     @Published var result = L10n.text("欢迎使用 Mac SVN")
     @Published var errorMessage: String?
+    @Published private(set) var automaticRefreshError: String?
     @Published var recentPaths: [String] = UserDefaults.standard.stringArray(forKey: "workingCopies") ?? []
     @Published private(set) var recentRepositoryURLs: [String] =
         UserDefaults.standard.stringArray(forKey: "recentRepositoryURLs") ?? []
@@ -134,6 +135,14 @@ final class AppModel: ObservableObject {
     private var diffTask: Task<Void, Never>?
     private var externalMergeTask: Task<Void, Never>?
     private var workingCopyDrafts: [WorkingCopyDraftKey: WorkingCopyDraft] = [:]
+    private lazy var automaticRefresh = WorkspaceRefreshController(
+        refresh: { [weak self] root in
+            try await self?.refreshLocalState(at: root)
+        },
+        reportFailure: { [weak self] error in
+            self?.automaticRefreshError = error.localizedDescription
+        }
+    )
 
     init() {
         do {
@@ -187,7 +196,13 @@ final class AppModel: ObservableObject {
         // 重新登录必须可以修复过期或损坏的钥匙串条目，无需先读取旧密码。
         let executable = try SVNConfiguration.executableURL(for: executablePath)
         isAuthenticating = true
-        defer { isAuthenticating = false }
+        let refreshTask = automaticRefresh.suspend()
+        defer {
+            isAuthenticating = false
+            automaticRefresh.resume()
+        }
+        await refreshTask?.value
+        try Task.checkCancellation()
         let client = SVNClient(executable: executable, authentication: authentication, globalIgnores: globalIgnores)
         let location = try await client.repositoryLocation(repository)
         try Task.checkCancellation()
@@ -238,7 +253,13 @@ final class AppModel: ObservableObject {
     func performFinderOperation(_ action: @MainActor () async throws -> Void) async throws {
         guard !isBusy else { throw SVNError(L10n.text("请等待当前操作完成。")) }
         operation = L10n.text("访达操作")
-        defer { operation = "" }
+        let refreshTask = automaticRefresh.suspend()
+        defer {
+            operation = ""
+            automaticRefresh.resume()
+        }
+        await refreshTask?.value
+        try Task.checkCancellation()
         try await action()
     }
 
@@ -330,6 +351,8 @@ final class AppModel: ObservableObject {
         conflictError = nil
         remember(copy.root)
         rememberRepository(copy.repositoryURL)
+        automaticRefreshError = nil
+        automaticRefresh.watch(copy.root)
         return copy
     }
 
@@ -355,6 +378,43 @@ final class AppModel: ObservableObject {
             }
             self.result = L10n.text("本地状态已刷新")
         }
+    }
+
+    func requestAutomaticRefresh() {
+        automaticRefresh.request()
+    }
+
+    /// 自动读取仅更新本地状态和当前差异，不重置草稿、历史或操作日志，也不读取仓库密码。
+    func refreshLocalState(at root: URL) async throws {
+        guard workingCopy?.root == root else { return }
+        let path = focusedPath
+        let client = SVNClient(
+            executable: try SVNConfiguration.executableURL(for: executablePath),
+            globalIgnores: globalIgnores
+        )
+        let newEntries = try await client.status(at: root, includeIgnored: showIgnored)
+        let newInfo = try await client.workingCopy(at: root)
+        var newDiff: String?
+        if let path {
+            if let message = unavailableDiff(path: path, entry: newEntries.first { $0.path == path }) {
+                newDiff = message
+            } else {
+                newDiff = try await client.diff(path: path, at: root)
+            }
+        }
+        try Task.checkCancellation()
+        guard workingCopy?.root == root else { return }
+        if entries != newEntries { entries = newEntries }
+        if workingCopy?.revision != newInfo.revision || workingCopy?.repositoryURL != newInfo.repositoryURL {
+            workingCopy = newInfo
+        }
+        let validSelection = selectedPaths.intersection(selectablePaths(in: newEntries))
+        if selectedPaths != validSelection { selectedPaths = validSelection }
+        if focusedPath == path, let newDiff {
+            diffTask?.cancel()
+            if diffText != newDiff { diffText = newDiff }
+        }
+        automaticRefreshError = automaticRefresh.observationError?.localizedDescription
     }
 
     /// 清理仅由用户显式触发，不删除未受控文件，也不自动重试网络操作。
@@ -992,21 +1052,12 @@ final class AppModel: ObservableObject {
     /// Cancel the previous request and check identity so old diff results never overwrite new selections.
     func loadDiff() {
         diffTask?.cancel()
-        guard let path = focusedPath, let copy = workingCopy,
-              let entry = entries.first(where: { $0.path == path }) else {
+        guard let path = focusedPath, let copy = workingCopy else {
             diffText = L10n.text("选择一个文件查看差异")
             return
         }
-        if entry.item == "unversioned" {
-            diffText = L10n.text("此项目存在于本地，但尚未纳入 SVN 版本控制，没有可比较的仓库基准版本。\n\n需要提交时，先勾选并点击“添加到 SVN”；添加只安排版本控制，提交后才会上传。添加目录不会自动添加子文件。\n\n不需要提交的本地文件可以保留原状。")
-            return
-        }
-        if entry.item == "ignored" {
-            diffText = L10n.text("此项目匹配 SVN 忽略规则，未纳入版本控制，不会列入添加或提交候选。\n\n规则可能来自本应用的全局忽略设置、系统 SVN 配置或目录忽略属性。需要添加时，请先调整对应规则并刷新。已受版本控制的文件不受忽略规则影响。")
-            return
-        }
-        if ["external", "missing", "obstructed", "incomplete"].contains(entry.item) {
-            diffText = L10n.text("%@：%@\n\n当前状态无法展示文本差异，请先检查工作副本；外部工作副本需单独打开。", entry.label, path)
+        if let message = unavailableDiff(path: path, entry: entries.first { $0.path == path }) {
+            diffText = message
             return
         }
         diffText = L10n.text("正在读取差异…")
@@ -1022,6 +1073,21 @@ final class AppModel: ObservableObject {
                 diffText = error.localizedDescription
             }
         }
+    }
+
+    /// 手动和自动读取共用不可比较状态的说明，避免展示过期的文本差异。
+    private func unavailableDiff(path: String, entry: StatusEntry?) -> String? {
+        guard let entry else { return L10n.text("选择一个文件查看差异") }
+        if entry.item == "unversioned" {
+            return L10n.text("此项目存在于本地，但尚未纳入 SVN 版本控制，没有可比较的仓库基准版本。\n\n需要提交时，先勾选并点击“添加到 SVN”；添加只安排版本控制，提交后才会上传。添加目录不会自动添加子文件。\n\n不需要提交的本地文件可以保留原状。")
+        }
+        if entry.item == "ignored" {
+            return L10n.text("此项目匹配 SVN 忽略规则，未纳入版本控制，不会列入添加或提交候选。\n\n规则可能来自本应用的全局忽略设置、系统 SVN 配置或目录忽略属性。需要添加时，请先调整对应规则并刷新。已受版本控制的文件不受忽略规则影响。")
+        }
+        if ["external", "missing", "obstructed", "incomplete"].contains(entry.item) {
+            return L10n.text("%@：%@\n\n当前状态无法展示文本差异，请先检查工作副本；外部工作副本需单独打开。", entry.label, path)
+        }
+        return nil
     }
 
     /// 配置保存后统一用于所有新命令，并刷新状态以清除已经被忽略的旧选择。
@@ -1064,6 +1130,8 @@ final class AppModel: ObservableObject {
 
     /// 清空副本相关状态，并阻止尚未完成的差异请求重新填充界面。
     private func closeWorkingCopy() {
+        automaticRefresh.stop()
+        automaticRefreshError = nil
         diffTask?.cancel()
         diffTask = nil
         workingCopy = nil
@@ -1139,6 +1207,7 @@ final class AppModel: ObservableObject {
         action: @escaping @MainActor () async throws -> Void
     ) {
         guard !isBusy else { return }
+        let refreshTask = automaticRefresh.suspend()
         diffTask?.cancel()
         operation = title
         writeProgress = streamOutput ? WriteOperationProgress(title: title) : nil
@@ -1150,8 +1219,11 @@ final class AppModel: ObservableObject {
                 checkoutProgress = nil
                 operation = ""
                 operationTask = nil
+                automaticRefresh.resume()
             }
             do {
+                await refreshTask?.value
+                try Task.checkCancellation()
                 try await action()
                 if streamOutput {
                     writeProgress?.phase = .completed
