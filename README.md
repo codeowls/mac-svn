@@ -84,6 +84,8 @@ open "dist/Mac SVN.app"
 
 ## 当前功能
 
+- 更新前可只读检查当前检出范围的远端变化、检查版本和本地路径重叠；externals 单独处理，重叠提示不代表一定冲突。
+
 - 已有副本深度调整（1.5.0 新增）：在工作区“检出深度”菜单选择根目录或已检出的受控子目录，支持全递归、直接子节点、仅文件、仅此项。读取实际深度，预览收缩会移除的本地受控项目；移除范围存在本地修改、未受控、忽略或外部内容时拒绝执行，确认前再次检查状态。操作会更新到最新版本并保存深度，不提交；取消或失败不会回滚已完成的下载和移除。
 - 统一的原生工作台样式；在“显示 → 外观”选择跟随系统、浅色或深色，仅影响此应用。
 - 提交说明可折叠，首次勾选自动展开；折叠保留会话草稿。紧凑列表显示文件类型与状态标签。
@@ -240,6 +242,8 @@ Version 1.5.0 adds a first-launch setup guide. It explains extension activation,
 Version 1.5.0 adds local status badges and directory aggregation while Mac SVN is running: green for no local changes, orange for modifications, blue for additions, red for conflicts or abnormal states, and gray for unversioned items. Green does not indicate synchronization with the server. Ignored and unscanned paths remain unbadged, and other Finder extensions monitoring the same directory may affect badge display.
 
 ### Features
+
+- Read-only remote change preview for the checked-out scope, with checked revision and local path overlaps. Externals are handled separately; overlaps do not guarantee conflicts.
 
 - Adjust the depth of an existing working copy (new in 1.5.0): select its root or a checked-out versioned directory from the Checkout depth menu, then choose recursive, immediate children, files only, or the directory alone. Preview versioned items that a reduction would remove; local changes, unversioned, ignored, or external content block removal, and status is checked again before applying. The operation updates to the latest revision and saves the depth without committing. Cancellation or failure does not roll back completed downloads or removals.
 - Consistent native workspace styling with System, Light, and Dark appearance options in the View menu.

@@ -84,6 +84,7 @@ private struct WorkingCopyDraft {
 final class AppModel: ObservableObject {
     let reviewState = FileReviewState()
     @Published var pendingReviewPaths: [String] = []
+    @Published var remoteChangesState: RemoteChangesState?
     weak var mainWindow: NSWindow?
     @Published var workingCopy: WorkingCopy?
     @Published var entries: [StatusEntry] = []
@@ -390,6 +391,43 @@ final class AppModel: ObservableObject {
 
     func requestAutomaticRefresh() {
         automaticRefresh.request()
+    }
+
+    func inspectRemoteChanges() {
+        guard !isBusy, let copy = workingCopy else { return }
+        let state = RemoteChangesState(copy: copy)
+        remoteChangesState = state
+        readRemoteChanges(state)
+    }
+
+    /// 清除上次结果再检查；失败明确显示，不将旧结果当成当前远端状态。
+    func readRemoteChanges(_ state: RemoteChangesState) {
+        guard !isBusy, remoteChangesState?.id == state.id else { return }
+        state.changes = nil
+        state.error = nil
+        state.isLoading = true
+        perform(L10n.text("检查远端变化"), reportFailure: { error in
+            state.isLoading = false
+            state.error = error is CancellationError
+                ? L10n.text("远端检查已取消，工作副本未修改。") : error.localizedDescription
+        }) {
+            let local = SVNClient(executable: try SVNConfiguration.executableURL(for: self.executablePath))
+            let current = try await local.workingCopy(at: state.copy.root)
+            guard current.repositoryURL == state.copy.repositoryURL else {
+                throw SVNError(L10n.text("工作副本仓库地址已变化，请重新打开后检查。"))
+            }
+            let changes = try await self.client(for: current.repositoryURL).remoteChanges(at: current.root)
+            try Task.checkCancellation()
+            guard self.remoteChangesState?.id == state.id else { return }
+            state.changes = changes
+            state.isLoading = false
+            self.result = L10n.text("检查到 %@ 个远端变化项目，工作副本未修改。", changes.items.count)
+        }
+    }
+
+    func closeRemoteChanges(_ state: RemoteChangesState) {
+        if state.isLoading { cancel() }
+        if remoteChangesState?.id == state.id { remoteChangesState = nil }
     }
 
     /// 自动读取仅更新本地状态和当前差异，不重置草稿、历史或操作日志，也不读取仓库密码。

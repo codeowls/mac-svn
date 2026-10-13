@@ -85,6 +85,10 @@ struct ContentView: View {
                 }
                 .quickHelp(L10n.text("登录或切换当前仓库账号"))
                 .disabled(model.isBusy || model.workingCopy == nil)
+                Button { model.inspectRemoteChanges() } label: {
+                    Label(L10n.text("远端变化"), systemImage: "arrow.triangle.2.circlepath")
+                }
+                .disabled(model.isBusy || model.workingCopy == nil)
                 Button { model.update() } label: {
                     Label(L10n.text("更新"), systemImage: "arrow.down.circle")
                 }
@@ -93,6 +97,18 @@ struct ContentView: View {
             }
         }
         .sheet(isPresented: $showCheckout) { CheckoutView(model: model) }
+        .sheet(item: Binding(
+            get: { model.remoteChangesState },
+            set: { state in
+                if state == nil, let previous = model.remoteChangesState {
+                    model.closeRemoteChanges(previous)
+                } else {
+                    model.remoteChangesState = state
+                }
+            }
+        )) { state in
+            RemoteChangesView(model: model, state: state)
+        }
         .sheet(item: $model.commitPlan, onDismiss: {
             if !model.pendingReviewPaths.isEmpty {
                 model.beginReview(paths: model.pendingReviewPaths)

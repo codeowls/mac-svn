@@ -81,6 +81,8 @@ struct MacSVNApp: App {
                     .disabled(model.isBusy || model.workingCopy == nil)
                 Button(L10n.text("更新工作副本")) { model.update() }
                     .disabled(model.isBusy || model.workingCopy == nil)
+                Button(L10n.text("检查远端变化")) { model.inspectRemoteChanges() }
+                    .disabled(model.isBusy || model.workingCopy == nil)
                 Button(L10n.text("历史记录")) { model.showSavedHistory() }
                     .disabled(model.isBusy || model.workingCopy == nil)
             }
