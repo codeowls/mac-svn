@@ -6,9 +6,11 @@ struct DiffPresentation: Sendable {
     let document: UnifiedDiff
     let columnWidth: CGFloat
     let unifiedWidth: CGFloat
+    let reading: DiffReading
 
     init(text: String) throws {
         document = try UnifiedDiff(text, checkCancellation: Task.checkCancellation)
+        reading = try DiffReading(document: document, checkCancellation: Task.checkCancellation)
         let font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
         var width: CGFloat = 0
         var unifiedWidth: CGFloat = 0
@@ -37,6 +39,19 @@ struct DiffPresentation: Sendable {
             let result = try await worker.value
             try Task.checkCancellation()
             return result
+        } onCancel: {
+            worker.cancel()
+        }
+    }
+
+    static func search(document: UnifiedDiff, query: String) async throws -> [DiffSearchMatch] {
+        let worker = Task.detached(priority: .userInitiated) {
+            try DiffReading.search(document: document, query: query, checkCancellation: Task.checkCancellation)
+        }
+        return try await withTaskCancellationHandler {
+            let matches = try await worker.value
+            try Task.checkCancellation()
+            return matches
         } onCancel: {
             worker.cancel()
         }

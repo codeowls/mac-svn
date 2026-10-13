@@ -725,3 +725,10 @@
 "实际提交范围已审阅 %@ / %@ 项" = "Reviewed %@ / %@ items in the actual commit scope";
 "审阅标记仅供参考；内容、属性或状态改变后需重新审阅，不会阻止提交。" = "Review marks are advisory. Content, property, or status changes require another review; marks do not block commits.";
 "返回审阅" = "Return to Review";
+"搜索差异文本" = "Search diff text";
+"查找" = "Find";
+"清除搜索" = "Clear Search";
+"%@ / %@ 个匹配" = "%@ / %@ matches";
+"上一个匹配" = "Previous Match";
+"下一个匹配" = "Next Match";
+"词级高亮" = "Word Highlights";

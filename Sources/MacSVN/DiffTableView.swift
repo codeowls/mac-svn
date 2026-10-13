@@ -5,6 +5,14 @@ import SVNCore
 struct DiffScrollRequest: Equatable {
     let id = UUID()
     let lineID: Int
+    var match: DiffSearchMatch? = nil
+}
+
+private struct DiffCellIdentity: Hashable {
+    let documentID: UUID
+    let rowID: Int
+    let sideBySide: Bool
+    let highlights: UUID
 }
 
 /// 原生表格按可见行复用视图，滚动和辅助功能不经过 SwiftUI 的 LazyVStack 行索引。
@@ -16,6 +24,9 @@ struct DiffTableView: NSViewRepresentable {
     let unifiedWidth: CGFloat
     let availableWidth: CGFloat
     let scrollRequest: DiffScrollRequest?
+    var wordRanges: [Int: [NSRange]] = [:]
+    var searchMatches: [DiffSearchMatch] = []
+    var showWords = true
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -56,21 +67,38 @@ struct DiffTableView: NSViewRepresentable {
         private var value: DiffTableView?
         private var rowIndices: [Int: Int] = [:]
         private var lastScrollID: UUID?
+        private var searchRanges: [Int: [NSRange]] = [:]
+        private var highlightIdentity = UUID()
 
         /// 仅内容或布局变化时重建行映射；窗口缩放只更新可见行宽度。
         func update(_ next: DiffTableView, table: NSTableView, scroll: NSScrollView) {
             let contentChanged = value?.documentID != next.documentID || value?.sideBySide != next.sideBySide
             let widthChanged = value?.columnWidth != next.columnWidth || value?.availableWidth != next.availableWidth
+            let highlightsChanged = value?.showWords != next.showWords || value?.searchMatches != next.searchMatches
+            if highlightsChanged {
+                highlightIdentity = UUID()
+            }
+            if value?.searchMatches != next.searchMatches {
+                searchRanges = Dictionary(grouping: next.searchMatches, by: \.lineID).mapValues { $0.map(\.range) }
+            }
             value = next
             let width = next.sideBySide
                 ? next.columnWidth * 2 + 1
                 : max(next.availableWidth, next.unifiedWidth)
             table.tableColumns[0].width = width
             if contentChanged {
-                let ids = next.sideBySide ? next.document.splitRows.map(\.id) : next.document.lines.map(\.id)
-                rowIndices = Dictionary(uniqueKeysWithValues: ids.enumerated().map { ($0.element, $0.offset) })
+                rowIndices = [:]
+                if next.sideBySide {
+                    for (index, row) in next.document.splitRows.enumerated() {
+                        for line in [row.left, row.right, row.spanning].compactMap({ $0 }) {
+                            rowIndices[line.id] = index
+                        }
+                    }
+                } else {
+                    rowIndices = Dictionary(uniqueKeysWithValues: next.document.lines.enumerated().map { ($0.element.id, $0.offset) })
+                }
                 table.reloadData()
-            } else if widthChanged {
+            } else if widthChanged || highlightsChanged {
                 let visible = table.rows(in: scroll.contentView.bounds)
                 if visible.length > 0 {
                     table.reloadData(
@@ -84,7 +112,8 @@ struct DiffTableView: NSViewRepresentable {
                 lastScrollID = request.id
                 // 左上角定位，长行不会因变更跳转而遮住左侧行号。
                 let y = min(table.rect(ofRow: index).minY, max(0, table.bounds.height - scroll.contentSize.height))
-                scroll.contentView.scroll(to: NSPoint(x: 0, y: y))
+                let x = horizontalPosition(for: request, value: next, scroll: scroll, table: table)
+                scroll.contentView.scroll(to: NSPoint(x: x, y: y))
                 scroll.reflectScrolledClipView(scroll.contentView)
             } else if contentChanged && next.scrollRequest == nil {
                 scroll.contentView.scroll(to: .zero)
@@ -106,15 +135,52 @@ struct DiffTableView: NSViewRepresentable {
             cell.identifier = identifier
             let content: AnyView
             if value.sideBySide {
-                content = AnyView(DiffRows.splitRow(value.document.splitRows[row], width: value.columnWidth))
+                content = AnyView(DiffRows.splitRow(
+                    value.document.splitRows[row], width: value.columnWidth,
+                    words: value.showWords ? value.wordRanges : [:], matches: searchRanges
+                ))
             } else {
-                content = AnyView(DiffRows.unifiedRow(value.document.lines[row]))
+                let line = value.document.lines[row]
+                content = AnyView(DiffRows.unifiedRow(
+                    line, words: value.showWords ? value.wordRanges[line.id] ?? [] : [],
+                    matches: searchRanges[line.id] ?? []
+                ))
             }
             cell.host.rootView = AnyView(content
+                // 原生可选择文本按当前行重建，避免复用宿主时残留上一行的文本或样式。
+                .id(DiffCellIdentity(
+                    documentID: value.documentID,
+                    rowID: value.sideBySide ? value.document.splitRows[row].id : value.document.lines[row].id,
+                    sideBySide: value.sideBySide, highlights: highlightIdentity
+                ))
                 .font(.system(size: 12, design: .monospaced))
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading))
             return cell
+        }
+
+        /// 搜索长行时同时露出目标列；普通变更导航仍从行号位置开始。
+        private func horizontalPosition(
+            for request: DiffScrollRequest, value: DiffTableView, scroll: NSScrollView, table: NSTableView
+        ) -> CGFloat {
+            guard let match = request.match,
+                  let line = value.document.lines.first(where: { $0.id == match.lineID }) else { return 0 }
+            var text = line.text as NSString
+            var offset = match.range.location
+            var inset: CGFloat = 120
+            if value.sideBySide {
+                if line.oldNumber != nil || line.newNumber != nil {
+                    text = String(line.text.dropFirst()) as NSString
+                    offset = max(0, offset - 1)
+                    inset = line.kind == .addition ? value.columnWidth + 72 : 72
+                } else {
+                    inset = 12
+                }
+            }
+            let font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+            let target = (text.substring(to: offset) as NSString).size(withAttributes: [.font: font]).width + inset
+            let desired = max(0, target - scroll.contentSize.width / 3)
+            return min(desired, max(0, table.bounds.width - scroll.contentSize.width))
         }
     }
 

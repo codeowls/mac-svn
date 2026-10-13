@@ -87,10 +87,20 @@ struct DiffContentView: View {
     @ViewState private var scrollRequest: DiffScrollRequest?
     @ViewState private var isPreparing = true
     @ViewState private var preparationError: String?
+    @ViewState private var wordRanges: [Int: [NSRange]] = [:]
+    @ViewState private var showWords = true
+    @ViewState private var searchQuery = ""
+    @ViewState private var searchMatches: [DiffSearchMatch] = []
+    @ViewState private var matchIndex = 0
+    @ViewState private var isSearching = false
+    @ViewState private var searchError: String?
+    @SwiftUI.FocusState private var searchFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
             header
+            Divider()
+            searchBar
             Divider()
             VStack(spacing: 0) {
                 if !document.hunkIDs.isEmpty {
@@ -151,16 +161,9 @@ struct DiffContentView: View {
                             .foregroundStyle(.red)
                             .textSelection(.enabled)
                             .padding(24)
-                    } else if document.hunkIDs.isEmpty {
+                    } else if document.containsBinaryNotice {
                         ScrollView {
-                            if document.containsBinaryNotice {
-                                binaryNotice
-                            } else {
-                                Text(text)
-                                    .textSelection(.enabled)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .padding(24)
-                            }
+                            binaryNotice
                         }
                         .background(Color(nsColor: .textBackgroundColor))
                     } else {
@@ -171,12 +174,15 @@ struct DiffContentView: View {
                             columnWidth: width,
                             unifiedWidth: measuredUnifiedWidth,
                             availableWidth: availableWidth,
-                            scrollRequest: scrollRequest
+                            scrollRequest: scrollRequest,
+                            wordRanges: wordRanges, searchMatches: searchMatches, showWords: showWords
                         )
                     }
                 }
                 .onChange(of: sideBySide) { _, _ in
-                    if !document.hunkIDs.isEmpty {
+                    if !searchQuery.isEmpty, let match = scrollRequest?.match {
+                        scrollRequest = DiffScrollRequest(lineID: match.lineID, match: match)
+                    } else if !document.hunkIDs.isEmpty {
                         scrollRequest = DiffScrollRequest(lineID: document.hunkIDs[hunkIndex])
                     }
                 }
@@ -196,6 +202,83 @@ struct DiffContentView: View {
         .frame(minWidth: 850, idealWidth: 1050, minHeight: 540, idealHeight: 680)
         .modifier(WorkspaceBackground())
         .task(id: text) { await updateDocument() }
+        .task(id: searchQuery + documentID.uuidString) { await updateSearch() }
+    }
+
+    private var searchBar: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 12) {
+                TextField(L10n.text("搜索差异文本"), text: $searchQuery)
+                    .textFieldStyle(.roundedBorder)
+                    .focused($searchFocused)
+                    .onSubmit { moveMatch(by: 1) }
+                    .frame(maxWidth: 280)
+                Button(L10n.text("查找")) { searchFocused = true }
+                    .keyboardShortcut("f")
+                if !searchQuery.isEmpty {
+                    Button(L10n.text("清除搜索")) { searchQuery = "" }
+                }
+                Spacer()
+                if isSearching {
+                    ProgressView().controlSize(.small)
+                } else if !searchQuery.isEmpty {
+                    Text(L10n.text("%@ / %@ 个匹配", searchMatches.isEmpty ? 0 : matchIndex + 1, searchMatches.count))
+                        .font(.caption).monospacedDigit()
+                }
+                Button { moveMatch(by: -1) } label: { Image(systemName: "chevron.up") }
+                    .help(L10n.text("上一个匹配"))
+                    .accessibilityLabel(L10n.text("上一个匹配"))
+                    .keyboardShortcut("g", modifiers: [.command, .shift])
+                    .disabled(searchMatches.isEmpty || isSearching)
+                Button { moveMatch(by: 1) } label: { Image(systemName: "chevron.down") }
+                    .help(L10n.text("下一个匹配"))
+                    .accessibilityLabel(L10n.text("下一个匹配"))
+                    .keyboardShortcut("g")
+                    .disabled(searchMatches.isEmpty || isSearching)
+                Toggle(L10n.text("词级高亮"), isOn: $showWords)
+                    .toggleStyle(.checkbox)
+                    .disabled(document.hunkIDs.isEmpty)
+            }
+            .disabled(isPreparing || document.containsBinaryNotice || preparationError != nil)
+            if let searchError {
+                Text(searchError).font(.caption).foregroundStyle(.red)
+            }
+        }
+        .padding(12)
+        .background(.bar)
+    }
+
+    private func moveMatch(by offset: Int) {
+        guard !searchMatches.isEmpty else { return }
+        matchIndex = (matchIndex + offset + searchMatches.count) % searchMatches.count
+        let match = searchMatches[matchIndex]
+        scrollRequest = DiffScrollRequest(lineID: match.lineID, match: match)
+    }
+
+    @MainActor
+    private func updateSearch() async {
+        searchMatches = []
+        matchIndex = 0
+        searchError = nil
+        guard !searchQuery.isEmpty, !isPreparing, !document.containsBinaryNotice else {
+            isSearching = false
+            return
+        }
+        isSearching = true
+        do {
+            let matches = try await DiffPresentation.search(document: document, query: searchQuery)
+            try Task.checkCancellation()
+            searchMatches = matches
+            isSearching = false
+            if let first = matches.first {
+                scrollRequest = DiffScrollRequest(lineID: first.lineID, match: first)
+            }
+        } catch is CancellationError {
+            return
+        } catch {
+            searchError = error.localizedDescription
+            isSearching = false
+        }
     }
 
     private var header: some View {
@@ -278,6 +361,8 @@ struct DiffContentView: View {
         isPreparing = true
         preparationError = nil
         document = UnifiedDiff("")
+        wordRanges = [:]
+        searchMatches = []
         measuredColumnWidth = 0
         measuredUnifiedWidth = 0
         scrollRequest = nil
@@ -286,6 +371,7 @@ struct DiffContentView: View {
             let presentation = try await DiffPresentation.prepare(text: text)
             try Task.checkCancellation()
             document = presentation.document
+            wordRanges = presentation.reading.wordRanges
             measuredColumnWidth = presentation.columnWidth
             measuredUnifiedWidth = presentation.unifiedWidth
             documentID = UUID()
