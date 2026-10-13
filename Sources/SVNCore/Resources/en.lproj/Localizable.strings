@@ -160,7 +160,7 @@
 "%@\n\n请确认其他 SVN 客户端或终端已停止操作此副本。清理会完成未完成的本地管理任务并释放工作副本锁，不删除未受控文件。完成后可手动更新。" = "%@\n\nMake sure other SVN clients and terminals have stopped using this working copy. Cleanup completes pending local administrative tasks and releases locks without deleting unversioned files. You can update manually afterward.";
 "从最近列表移除此工作副本？" = "Remove This Working Copy from Recents?";
 "移除记录" = "Remove Record";
-"%@\n\n仅移除最近记录，不会删除本地文件。该副本的会话草稿将被清除；如果当前已打开，也会关闭其工作区。" = "%@\n\nThis removes only the recent entry, leaving local files intact. Session drafts for this copy will be cleared. If it is currently open, its workspace will also close.";
+"%@\n\n仅移除最近记录，不会删除本地文件。该副本的会话状态和本地提交草稿将被清除；如果当前已打开，也会关闭其工作区。" = "%@\n\nThis removes only the recent entry, leaving local files intact. Session state and the saved commit message for this copy will be cleared. If it is currently open, its workspace will also close.";
 "最近的工作副本" = "Recent Working Copies";
 "刷新工作副本" = "Refresh Working Copy";
 "清理工作副本锁…" = "Clean Up Working Copy Locks…";
@@ -758,3 +758,9 @@
 "%@ 个已选项目当前隐藏" = "%@ selected entries are currently hidden";
 "试试其他状态或路径关键词" = "Try a different status or path keyword";
 "工作副本根目录" = "Working Copy Root";
+"不支持的提交草稿格式。" = "Unsupported commit draft format.";
+"提交草稿包含重复副本记录。" = "Duplicate working copies in the commit draft file.";
+"提交草稿未保存：%@" = "Commit draft was not saved: %@";
+"无法移除提交草稿：%@" = "Could not remove the commit draft: %@";
+"提交草稿保存失败，应用暂未退出。请重试保存后退出，以免丢失提交说明。" = "The commit draft could not be saved, so the app has not quit. Retry saving before quitting to preserve the message.";
+"重试保存草稿" = "Retry Saving Draft";

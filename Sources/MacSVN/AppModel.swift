@@ -60,16 +60,6 @@ struct ExternalMergeActivity {
     var message: String
 }
 
-private struct WorkingCopyDraftKey: Hashable {
-    let path: String
-    let repository: String
-
-    init(_ copy: WorkingCopy) {
-        path = copy.root.resolvingSymlinksInPath().path
-        repository = copy.repositoryURL
-    }
-}
-
 private struct WorkingCopyDraft {
     var message = ""
     var fileFilter = ""
@@ -103,7 +93,14 @@ final class AppModel: ObservableObject {
     @Published private(set) var isLoadingMoreHistory = false
     @Published private(set) var historyPageError: String?
     @Published private(set) var historyPageRequiresAuthentication = false
-    @Published var message = ""
+    @Published var message = "" {
+        didSet {
+            guard !restoringMessage, message != oldValue, let copy = workingCopy else { return }
+            unsavedCommitMessages[WorkingCopyDraftKey(copy)] = message
+            _ = flushCommitDrafts()
+        }
+    }
+    @Published private(set) var draftPersistenceError: String?
     @Published var fileFilter = ""
     @Published var statusFilter = StatusFilter.all
     @Published var groupByDirectory = false
@@ -145,6 +142,9 @@ final class AppModel: ObservableObject {
     private var diffTask: Task<Void, Never>?
     private var externalMergeTask: Task<Void, Never>?
     private var workingCopyDrafts: [WorkingCopyDraftKey: WorkingCopyDraft] = [:]
+    private let commitDraftStore: CommitDraftStore
+    private var restoringMessage = false
+    private var unsavedCommitMessages: [WorkingCopyDraftKey: String] = [:]
     private lazy var automaticRefresh = WorkspaceRefreshController(
         refresh: { [weak self] root in
             try await self?.refreshLocalState(at: root)
@@ -154,7 +154,8 @@ final class AppModel: ObservableObject {
         }
     )
 
-    init() {
+    init(commitDraftStore: CommitDraftStore = CommitDraftStore(url: CommitDraftStore.defaultURL)) {
+        self.commitDraftStore = commitDraftStore
         do {
             savedAuthenticationRoots = try keychain.roots()
         } catch {
@@ -338,8 +339,11 @@ final class AppModel: ObservableObject {
         let copy = directory.resolvingSymlinksInPath() == discovered.root.resolvingSymlinksInPath()
             ? discovered : try await client.workingCopy(at: discovered.root)
         let key = WorkingCopyDraftKey(copy)
-        let draft = workingCopy.map(WorkingCopyDraftKey.init) == key
+        var draft = workingCopy.map(WorkingCopyDraftKey.init) == key
             ? currentDraft() : workingCopyDrafts[key] ?? WorkingCopyDraft()
+        if workingCopy.map(WorkingCopyDraftKey.init) != key, workingCopyDrafts[key] == nil {
+            draft.message = try commitDraftStore.message(for: key)
+        }
         let entries = try await client.status(at: copy.root, includeIgnored: draft.showIgnored)
         let restoredReview = FileReviewState()
         restoredReview.restore(draft.reviewedSnapshots)
@@ -363,7 +367,9 @@ final class AppModel: ObservableObject {
         resetHistory()
         historyFilter = draft.historyFilter
         historyPath = draft.historyPath
+        restoringMessage = true
         message = draft.message
+        restoringMessage = false
         reviewState.restore(reviewedSnapshots)
         showHistory = false
         commitPlan = nil
@@ -386,7 +392,7 @@ final class AppModel: ObservableObject {
         return copy
     }
 
-    /// 草稿只留在当前 App 会话，按本地根目录及仓库 URL 隔离，不持久化提交内容。
+    /// 视图、选择和审阅状态保留在会话中；提交说明另外保存到本机以供重启恢复。
     private func currentDraft() -> WorkingCopyDraft {
         WorkingCopyDraft(
             message: message, fileFilter: fileFilter,
@@ -1211,12 +1217,35 @@ final class AppModel: ObservableObject {
         operationTask?.cancel()
     }
 
+    /// 写入失败保留待保存内容供重试，不能把未保存的草稿报告为保存成功。
+    @discardableResult
+    func flushCommitDrafts() -> Bool {
+        guard !unsavedCommitMessages.isEmpty else { return true }
+        do {
+            try commitDraftStore.update(unsavedCommitMessages)
+            unsavedCommitMessages = [:]
+            draftPersistenceError = nil
+            return true
+        } catch {
+            draftPersistenceError = L10n.text("提交草稿未保存：%@", error.localizedDescription)
+            return false
+        }
+    }
+
     /// 移除记录时同步关闭对应工作区；磁盘文件保持不变。
     func removeRecentPath(_ path: String) {
         guard !isBusy else { return }
+        let root = URL(fileURLWithPath: path).resolvingSymlinksInPath().path
+        do {
+            try commitDraftStore.update(unsavedCommitMessages, removingRoot: root)
+            unsavedCommitMessages = [:]
+            draftPersistenceError = nil
+        } catch {
+            errorMessage = L10n.text("无法移除提交草稿：%@", error.localizedDescription)
+            return
+        }
         recentPaths.removeAll { $0 == path }
         UserDefaults.standard.set(recentPaths, forKey: "workingCopies")
-        let root = URL(fileURLWithPath: path).resolvingSymlinksInPath().path
         workingCopyDrafts = workingCopyDrafts.filter { $0.key.path != root }
         if workingCopy?.root.path == path || recentPaths.isEmpty {
             closeWorkingCopy()

@@ -181,7 +181,7 @@ struct ContentView: View {
             }
             .disabled(model.isBusy)
         } message: { path in
-            Text(L10n.text("%@\n\n仅移除最近记录，不会删除本地文件。该副本的会话草稿将被清除；如果当前已打开，也会关闭其工作区。", path))
+            Text(L10n.text("%@\n\n仅移除最近记录，不会删除本地文件。该副本的会话状态和本地提交草稿将被清除；如果当前已打开，也会关闭其工作区。", path))
         }
         .onChange(of: model.focusedPath) { _, _ in model.loadDiff() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
@@ -433,6 +433,15 @@ struct ContentView: View {
             }
             .padding(.horizontal, 12).padding(.vertical, 8)
             .disabled(model.isBusy)
+            if let error = model.draftPersistenceError {
+                HStack {
+                    Label(error, systemImage: "exclamationmark.triangle")
+                        .font(.caption).foregroundStyle(.red).textSelection(.enabled)
+                    Spacer()
+                    Button(L10n.text("重试保存草稿")) { model.flushCommitDrafts() }
+                }
+                .padding(12)
+            }
             if let error = model.automaticRefreshError {
                 HStack {
                     Label(L10n.text("自动刷新失败：%@", error), systemImage: "exclamationmark.triangle")

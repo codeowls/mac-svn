@@ -3,6 +3,7 @@ import AppKit
 import SwiftUI
 
 final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
+    weak var model: AppModel?
     @Published var finderRequests: [FinderInboxItem] = []
 
     /// URL messages only enqueue forms; writes require an explicit confirmation in the host.
@@ -27,6 +28,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         true
+    }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard let model else { return .terminateNow }
+        if model.flushCommitDrafts() { return .terminateNow }
+        model.errorMessage = L10n.text("提交草稿保存失败，应用暂未退出。请重试保存后退出，以免丢失提交说明。")
+        return .terminateCancel
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -55,6 +63,7 @@ struct MacSVNApp: App {
     var body: some Scene {
         Window("Mac SVN", id: "main") {
             ContentView(model: model)
+                .onAppear { delegate.model = model }
                 .environment(\.locale, L10n.language.locale)
                 .frame(minWidth: 1000, minHeight: 680)
                 .preferredColorScheme(preferredColorScheme)

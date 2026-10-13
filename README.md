@@ -84,13 +84,15 @@ open "dist/Mac SVN.app"
 
 ## 当前功能
 
+- 提交说明按本地根目录和仓库地址原子保存到本机应用数据目录，重启后打开副本即可恢复；成功提交或确认移除副本记录会清除对应草稿。重启不恢复旧选中范围。保存失败会提示重试，并在仍有未保存内容时阻止正常退出。
+
 - 本地列表支持全部、修改（含属性修改和替换）、新增、冲突筛选及可折叠目录分组。筛选或折叠保留已选范围，隐藏的已选项目会明确提示；视图设置按副本保留在当前会话。
 
 - 更新前可只读检查当前检出范围的远端变化、检查版本和本地路径重叠；externals 单独处理，重叠提示不代表一定冲突。
 
 - 已有副本深度调整（1.5.0 新增）：在工作区“检出深度”菜单选择根目录或已检出的受控子目录，支持全递归、直接子节点、仅文件、仅此项。读取实际深度，预览收缩会移除的本地受控项目；移除范围存在本地修改、未受控、忽略或外部内容时拒绝执行，确认前再次检查状态。操作会更新到最新版本并保存深度，不提交；取消或失败不会回滚已完成的下载和移除。
 - 统一的原生工作台样式；在“显示 → 外观”选择跟随系统、浅色或深色，仅影响此应用。
-- 提交说明可折叠，首次勾选自动展开；折叠保留会话草稿。紧凑列表显示文件类型与状态标签。
+- 提交说明可折叠，首次勾选自动展开；折叠保留草稿。紧凑列表显示文件类型与状态标签。
 - 历史详情完整显示提交说明、作者和时间；文件名与目录分层显示，支持复制完整路径，差异底部精简为版本范围。
 
 - 设置中支持选择 SVN 可执行文件、自动检测常见安装位置及测试版本；保存前检查 SVN 1.14+，编辑草稿不会提前改变当前配置。
@@ -245,13 +247,15 @@ Version 1.5.0 adds local status badges and directory aggregation while Mac SVN i
 
 ### Features
 
+- Commit messages are saved atomically in local application data per root and repository URL, and restored when reopening a copy after restart. A successful commit or confirmed removal of a recent copy clears its draft. File selections are not restored across restarts. Save failures remain visible and prevent normal quitting while messages are unsaved.
+
 - Filter local entries by all, modified (including properties and replacements), added, or conflicted status; optionally group and collapse directories. Hidden selections remain selected and are explicitly counted. View settings are retained per working copy during the session.
 
 - Read-only remote change preview for the checked-out scope, with checked revision and local path overlaps. Externals are handled separately; overlaps do not guarantee conflicts.
 
 - Adjust the depth of an existing working copy (new in 1.5.0): select its root or a checked-out versioned directory from the Checkout depth menu, then choose recursive, immediate children, files only, or the directory alone. Preview versioned items that a reduction would remove; local changes, unversioned, ignored, or external content block removal, and status is checked again before applying. The operation updates to the latest revision and saves the depth without committing. Cancellation or failure does not roll back completed downloads or removals.
 - Consistent native workspace styling with System, Light, and Dark appearance options in the View menu.
-- Collapsible commit messages preserve session drafts and expand when files are first selected. Compact file rows show type icons and status badges.
+- Collapsible commit messages preserve drafts and expand when files are first selected. Compact file rows show type icons and status badges.
 - Full revision details show the message, author, and date. File names and directories are separated; full paths can be copied and diff footers show concise revision ranges.
 
 - Open existing working copies or browse a remote repository and check out a selected branch into a new or empty directory. Existing nonempty directories are not overwritten; externals are excluded.
