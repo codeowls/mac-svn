@@ -25,7 +25,7 @@ struct ContentView: View {
     }
 
     private var visibleEntries: [StatusEntry] {
-        model.entries.filter { model.fileFilter.isEmpty || $0.path.localizedCaseInsensitiveContains(model.fileFilter) }
+        model.visibleEntries
     }
 
     var body: some View {
@@ -417,6 +417,22 @@ struct ContentView: View {
             }
             .padding(12)
             .background(Color.primary.opacity(0.025))
+            HStack {
+                Picker(L10n.text("状态筛选"), selection: $model.statusFilter) {
+                    ForEach(StatusFilter.allCases, id: \.self) { filter in
+                        Text(filter.title).tag(filter)
+                    }
+                }
+                .pickerStyle(.segmented).frame(maxWidth: 360)
+                Toggle(L10n.text("按目录分组"), isOn: $model.groupByDirectory).toggleStyle(.checkbox)
+                Spacer()
+                if model.hiddenSelectionCount > 0 {
+                    Text(L10n.text("%@ 个已选项目当前隐藏", model.hiddenSelectionCount))
+                        .font(.caption).foregroundStyle(.orange)
+                }
+            }
+            .padding(.horizontal, 12).padding(.vertical, 8)
+            .disabled(model.isBusy)
             if let error = model.automaticRefreshError {
                 HStack {
                     Label(L10n.text("自动刷新失败：%@", error), systemImage: "exclamationmark.triangle")
@@ -434,101 +450,121 @@ struct ContentView: View {
                 ContentUnavailableView(L10n.text("工作副本干净"), systemImage: "checkmark.circle", description: Text(L10n.text("当前没有本地变更")))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if visibleEntries.isEmpty {
-                ContentUnavailableView(L10n.text("没有匹配的文件"), systemImage: "magnifyingglass", description: Text(L10n.text("试试其他路径关键词")))
+                ContentUnavailableView(L10n.text("没有匹配的文件"), systemImage: "magnifyingglass", description: Text(L10n.text("试试其他状态或路径关键词")))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView {
                     LazyVStack(spacing: 3) {
-                        ForEach(visibleEntries) { entry in
-                            HStack(spacing: 10) {
-                                Toggle(L10n.text("选择 %@", entry.path), isOn: Binding(
-                                    get: { model.selectedPaths.contains(entry.path) },
-                                    set: { selected in
-                                        if selected { model.selectedPaths.insert(entry.path) }
-                                        else { model.selectedPaths.remove(entry.path) }
-                                    }
-                                ))
-                                .labelsHidden().toggleStyle(.checkbox)
-                                .disabled(model.isBusy || (!entry.canCommit && !entry.canRevert && entry.item != "unversioned"))
+                        ForEach(model.statusRows) { row in
+                            if case .directory(let path, let count) = row {
                                 Button {
-                                    if entry.isConflict {
-                                        model.inspectConflict(path: entry.path)
+                                    if model.collapsedDirectories.contains(path) {
+                                        model.collapsedDirectories.remove(path)
                                     } else {
-                                        let selected = model.selectedEntries.filter(\.canCommit).map(\.path)
-                                        reviewState.begin(paths: selected.contains(entry.path) ? selected : [entry.path])
-                                        model.focusedPath = entry.path
-                                        showDiff = true
+                                        model.collapsedDirectories.insert(path)
                                     }
                                 } label: {
-                                    HStack(spacing: 10) {
-                                        Image(systemName: statusIcon(entry))
-                                            .font(.system(size: 17))
-                                            .foregroundStyle(statusColor(entry))
-                                            .frame(width: 24)
-                                        Text(entry.path)
-                                            .font(.system(size: 12, weight: .medium))
-                                            .lineLimit(2)
-                                            .multilineTextAlignment(.leading)
-                                            .help(entry.path)
-                                            .frame(maxWidth: .infinity, alignment: .leading)
-                                        if reviewState.snapshots[entry.path] != nil {
-                                            Image(systemName: "checkmark.circle.fill")
-                                                .foregroundStyle(.green)
-                                                .help(L10n.text("已审阅"))
-                                                .accessibilityLabel(L10n.text("已审阅"))
-                                        }
-                                        WorkspaceBadge(title: entry.label, color: statusColor(entry))
-                                            .fixedSize()
-                                            .help(entry.item == "unversioned"
-                                                ? L10n.text("仅存在于本地，尚未加入 SVN；点击查看说明")
-                                                : entry.item == "ignored" ? L10n.text("匹配 SVN 忽略规则；点击查看说明")
-                                                : entry.isConflict ? L10n.text("点击查看冲突详情") : L10n.text("点击查看文件差异"))
-                                        Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.tertiary)
+                                    HStack {
+                                        Image(systemName: model.collapsedDirectories.contains(path) ? "chevron.right" : "chevron.down")
+                                        Image(systemName: "folder")
+                                        Text(path == "." ? L10n.text("工作副本根目录") : path)
+                                        Text(L10n.text("%@ 项", count)).foregroundStyle(.secondary)
+                                        Spacer()
                                     }
-                                    .contentShape(Rectangle())
+                                    .font(.caption).padding(8).contentShape(Rectangle())
                                 }
                                 .buttonStyle(.plain).disabled(model.isBusy)
-                            }
-                            .padding(.horizontal, 11)
-                            .padding(.vertical, 8)
-                            .background(statusRowBackground(entry), in: RoundedRectangle(cornerRadius: 8))
-                            .onHover { isHovered in
-                                hoveredPath = isHovered ? entry.path : (hoveredPath == entry.path ? nil : hoveredPath)
-                            }
-                            .contextMenu {
-                                if entry.isConflict {
-                                    Button(L10n.text("查看冲突详情…")) { model.inspectConflict(path: entry.path) }
-                                        .disabled(model.isBusy)
+                            } else if case .entry(let entry) = row {
+                                HStack(spacing: 10) {
+                                    Toggle(L10n.text("选择 %@", entry.path), isOn: Binding(
+                                        get: { model.selectedPaths.contains(entry.path) },
+                                        set: { selected in
+                                            if selected { model.selectedPaths.insert(entry.path) }
+                                            else { model.selectedPaths.remove(entry.path) }
+                                        }
+                                    ))
+                                    .labelsHidden().toggleStyle(.checkbox)
+                                    .disabled(model.isBusy || (!entry.canCommit && !entry.canRevert && entry.item != "unversioned"))
+                                    Button {
+                                        if entry.isConflict {
+                                            model.inspectConflict(path: entry.path)
+                                        } else {
+                                            let selected = model.selectedEntries.filter(\.canCommit).map(\.path)
+                                            reviewState.begin(paths: selected.contains(entry.path) ? selected : [entry.path])
+                                            model.focusedPath = entry.path
+                                            showDiff = true
+                                        }
+                                    } label: {
+                                        HStack(spacing: 10) {
+                                            Image(systemName: statusIcon(entry))
+                                                .font(.system(size: 17))
+                                                .foregroundStyle(statusColor(entry))
+                                                .frame(width: 24)
+                                            Text(entry.path)
+                                                .font(.system(size: 12, weight: .medium))
+                                                .lineLimit(2)
+                                                .multilineTextAlignment(.leading)
+                                                .help(entry.path)
+                                                .frame(maxWidth: .infinity, alignment: .leading)
+                                            if reviewState.snapshots[entry.path] != nil {
+                                                Image(systemName: "checkmark.circle.fill")
+                                                    .foregroundStyle(.green)
+                                                    .help(L10n.text("已审阅"))
+                                                    .accessibilityLabel(L10n.text("已审阅"))
+                                            }
+                                            WorkspaceBadge(title: entry.label, color: statusColor(entry))
+                                                .fixedSize()
+                                                .help(entry.item == "unversioned"
+                                                    ? L10n.text("仅存在于本地，尚未加入 SVN；点击查看说明")
+                                                    : entry.item == "ignored" ? L10n.text("匹配 SVN 忽略规则；点击查看说明")
+                                                    : entry.isConflict ? L10n.text("点击查看冲突详情") : L10n.text("点击查看文件差异"))
+                                            Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.tertiary)
+                                        }
+                                        .contentShape(Rectangle())
+                                    }
+                                    .buttonStyle(.plain).disabled(model.isBusy)
                                 }
-                                Button(L10n.text("查看此路径历史")) { model.loadHistory(path: entry.path) }
-                                    .disabled(model.isBusy || !entry.canReadHistory)
-                                if entry.path != ".", !entry.isConflict,
-                                   !["unversioned", "ignored", "external", "deleted", "obstructed", "incomplete"].contains(entry.item) {
-                                    Button(L10n.text("重命名…")) { model.beginFileOperation(.rename, path: entry.path) }
-                                        .disabled(model.isBusy)
-                                    Button(L10n.text("删除…"), role: .destructive) { model.beginFileOperation(.delete, path: entry.path) }
-                                        .disabled(model.isBusy)
+                                .padding(.horizontal, 11)
+                                .padding(.vertical, 8)
+                                .background(statusRowBackground(entry), in: RoundedRectangle(cornerRadius: 8))
+                                .onHover { isHovered in
+                                    hoveredPath = isHovered ? entry.path : (hoveredPath == entry.path ? nil : hoveredPath)
                                 }
-                                Button(L10n.text("还原此项目…")) { model.prepareRevert(paths: [entry.path]) }
-                                    .disabled(model.isBusy || !entry.canRevert)
-                                Divider()
-                                if entry.item == "unversioned" {
-                                    Button(L10n.text("忽略此名称…")) { model.ignoreUnversioned(entry) }
-                                        .disabled(model.isBusy)
-                                    if !model.isLocalDirectory(entry.path), !(entry.path as NSString).pathExtension.isEmpty {
-                                        Button(L10n.text("忽略同扩展名…")) { model.ignoreUnversioned(entry, byExtension: true) }
+                                .contextMenu {
+                                    if entry.isConflict {
+                                        Button(L10n.text("查看冲突详情…")) { model.inspectConflict(path: entry.path) }
                                             .disabled(model.isBusy)
                                     }
-                                }
-                                Button(L10n.text("编辑所在目录忽略…")) {
-                                    model.editDirectoryIgnores(path: model.parentDirectory(of: entry.path))
-                                }
-                                .disabled(model.isBusy)
-                                if model.isLocalDirectory(entry.path), !["unversioned", "ignored"].contains(entry.item) {
-                                    Button(L10n.text("编辑此目录忽略…")) { model.editDirectoryIgnores(path: entry.path) }
-                                        .disabled(model.isBusy)
-                                    Button(L10n.text("调整检出深度…")) { model.editWorkingCopyDepth(path: entry.path) }
-                                        .disabled(model.isBusy)
+                                    Button(L10n.text("查看此路径历史")) { model.loadHistory(path: entry.path) }
+                                        .disabled(model.isBusy || !entry.canReadHistory)
+                                    if entry.path != ".", !entry.isConflict,
+                                       !["unversioned", "ignored", "external", "deleted", "obstructed", "incomplete"].contains(entry.item) {
+                                        Button(L10n.text("重命名…")) { model.beginFileOperation(.rename, path: entry.path) }
+                                            .disabled(model.isBusy)
+                                        Button(L10n.text("删除…"), role: .destructive) { model.beginFileOperation(.delete, path: entry.path) }
+                                            .disabled(model.isBusy)
+                                    }
+                                    Button(L10n.text("还原此项目…")) { model.prepareRevert(paths: [entry.path]) }
+                                        .disabled(model.isBusy || !entry.canRevert)
+                                    Divider()
+                                    if entry.item == "unversioned" {
+                                        Button(L10n.text("忽略此名称…")) { model.ignoreUnversioned(entry) }
+                                            .disabled(model.isBusy)
+                                        if !model.isLocalDirectory(entry.path), !(entry.path as NSString).pathExtension.isEmpty {
+                                            Button(L10n.text("忽略同扩展名…")) { model.ignoreUnversioned(entry, byExtension: true) }
+                                                .disabled(model.isBusy)
+                                        }
+                                    }
+                                    Button(L10n.text("编辑所在目录忽略…")) {
+                                        model.editDirectoryIgnores(path: model.parentDirectory(of: entry.path))
+                                    }
+                                    .disabled(model.isBusy)
+                                    if model.isLocalDirectory(entry.path), !["unversioned", "ignored"].contains(entry.item) {
+                                        Button(L10n.text("编辑此目录忽略…")) { model.editDirectoryIgnores(path: entry.path) }
+                                            .disabled(model.isBusy)
+                                        Button(L10n.text("调整检出深度…")) { model.editWorkingCopyDepth(path: entry.path) }
+                                            .disabled(model.isBusy)
+                                    }
                                 }
                             }
                         }

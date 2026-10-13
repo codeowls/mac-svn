@@ -752,3 +752,9 @@
 "工作副本仓库地址已变化，请重新打开后检查。" = "The working copy repository URL has changed. Reopen it before checking.";
 "检查到 %@ 个远端变化项目，工作副本未修改。" = "Found %@ remotely changed entries. The working copy was not modified.";
 "远端变化" = "Remote Changes";
+"全部状态" = "All";
+"状态筛选" = "Status Filter";
+"按目录分组" = "Group by Directory";
+"%@ 个已选项目当前隐藏" = "%@ selected entries are currently hidden";
+"试试其他状态或路径关键词" = "Try a different status or path keyword";
+"工作副本根目录" = "Working Copy Root";

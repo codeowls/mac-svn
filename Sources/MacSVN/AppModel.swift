@@ -73,6 +73,9 @@ private struct WorkingCopyDraftKey: Hashable {
 private struct WorkingCopyDraft {
     var message = ""
     var fileFilter = ""
+    var statusFilter = StatusFilter.all
+    var groupByDirectory = false
+    var collapsedDirectories: Set<String> = []
     var selectedPaths: Set<String> = []
     var showIgnored = false
     var historyFilter = HistoryFilter()
@@ -102,6 +105,9 @@ final class AppModel: ObservableObject {
     @Published private(set) var historyPageRequiresAuthentication = false
     @Published var message = ""
     @Published var fileFilter = ""
+    @Published var statusFilter = StatusFilter.all
+    @Published var groupByDirectory = false
+    @Published var collapsedDirectories: Set<String> = []
     @Published var operation = ""
     @Published var result = L10n.text("欢迎使用 Mac SVN")
     @Published var errorMessage: String?
@@ -158,6 +164,19 @@ final class AppModel: ObservableObject {
 
     var isBusy: Bool { !operation.isEmpty || isAuthenticating }
     var selectedEntries: [StatusEntry] { entries.filter { selectedPaths.contains($0.path) } }
+    var visibleEntries: [StatusEntry] {
+        entries.filter { statusFilter.matches($0) && (fileFilter.isEmpty || $0.path.localizedCaseInsensitiveContains(fileFilter)) }
+    }
+    var statusRows: [StatusListRow] {
+        StatusListRow.make(entries: visibleEntries, grouped: groupByDirectory, collapsed: collapsedDirectories)
+    }
+    var hiddenSelectionCount: Int {
+        let visible = Set(statusRows.compactMap { row -> String? in
+            if case .entry(let entry) = row { return entry.path }
+            return nil
+        })
+        return selectedPaths.subtracting(visible).count
+    }
     var filteredLogs: [LogEntry] { logs.filter(historyFilter.matches) }
     var canCommit: Bool {
         !isBusy && !selectedEntries.isEmpty && selectedEntries.allSatisfy(\.canCommit)
@@ -335,6 +354,9 @@ final class AppModel: ObservableObject {
         self.entries = entries
         selectedPaths = draft.selectedPaths.intersection(selectablePaths(in: entries))
         fileFilter = draft.fileFilter
+        statusFilter = draft.statusFilter
+        groupByDirectory = draft.groupByDirectory
+        collapsedDirectories = draft.collapsedDirectories
         showIgnored = draft.showIgnored
         focusedPath = nil
         diffText = L10n.text("选择一个文件查看差异")
@@ -367,7 +389,9 @@ final class AppModel: ObservableObject {
     /// 草稿只留在当前 App 会话，按本地根目录及仓库 URL 隔离，不持久化提交内容。
     private func currentDraft() -> WorkingCopyDraft {
         WorkingCopyDraft(
-            message: message, fileFilter: fileFilter, selectedPaths: selectedPaths,
+            message: message, fileFilter: fileFilter,
+            statusFilter: statusFilter, groupByDirectory: groupByDirectory, collapsedDirectories: collapsedDirectories,
+            selectedPaths: selectedPaths,
             showIgnored: showIgnored, historyFilter: historyFilter, historyPath: historyPath,
             reviewedSnapshots: reviewState.snapshots
         )
@@ -1215,6 +1239,9 @@ final class AppModel: ObservableObject {
         resetHistory()
         message = ""
         fileFilter = ""
+        statusFilter = .all
+        groupByDirectory = false
+        collapsedDirectories = []
         showIgnored = false
         showHistory = false
         errorMessage = nil
