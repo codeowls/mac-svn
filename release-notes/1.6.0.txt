@@ -1,0 +1,24 @@
+Mac SVN 1.6.0
+
+- 本地自动刷新：文件变化后自动合并刷新状态和当前差异，保留提交说明、选中范围、筛选和历史；副本切换及前台 SVN 操作期间避免旧读取覆盖当前工作区。刷新失败明确提示。
+- 连续审阅与审阅标记：在同一个差异窗口逐项检查选中文件，支持前后导航、已审阅标记及提交预检范围内的关联项目。文件内容、属性或状态变化后标记失效；标记不改变提交范围，也不代替提交前校验。
+- 差异阅读增强：词级高亮突出一行中实际变化的内容；支持不区分大小写的文本搜索、匹配计数和前后跳转，并在统一或左右对照布局中定位匹配。也支持属性差异文本搜索。
+- 更新前查看远端变化：只读查询当前检出范围，展示检查时的远端版本、变化路径和本地重叠项目。重叠不代表一定冲突；externals 需单独检查，实际更新仍需明确操作。
+- 状态筛选与目录分组：快速筛选修改（含属性修改和替换）、新增和冲突，或按所在目录分组、折叠。隐藏项目仍保留原有选择，并显示隐藏的已选数量；视图设置按副本在会话内保留。
+- 提交草稿恢复：按本地根目录和仓库地址将提交说明原子保存到本机，重启后打开副本即可恢复。成功提交或确认移除副本记录会清除对应草稿；重启不恢复旧文件选择。保存失败明确提示并支持重试。
+- 检查新版本：从应用菜单或“设置 → 通用”手动查看最新正式版、发布时间及发布说明，并打开项目发布页面下载。请求失败不会显示为“已是最新”；下载和安装由用户操作。
+
+要求 macOS 14+ 和本机 Subversion 1.14+。安装包包含 Apple Silicon / Intel 架构，支持简体中文和英文。
+本版仍采用 ad-hoc 签名，未进行 Developer ID 签名或 Apple 公证。已完成本机 Apple Silicon 验收；跨设备及 Intel 实机兼容性尚未验证。
+
+English
+- Automatic local refresh coalesces file events and refreshes status and the current diff while preserving messages, selections, filters, and history. Working-copy changes and foreground SVN operations prevent stale reads from overwriting the workspace. Read failures are reported.
+- Continuous review in one diff window, with previous/next navigation, review marks, and related entries from the actual commit preflight scope. Content, property, or status changes invalidate marks. Marks neither change commit scope nor replace preflight validation.
+- Word highlights emphasize actual changes within paired lines. Case-insensitive diff search includes match counts and navigation in unified and side-by-side layouts, plus property-only diff search.
+- Read-only remote change previews show the checked repository revision, affected paths, and local overlaps within the checked-out scope. Overlaps do not guarantee conflicts. Externals need separate checks, and updating still requires an explicit action.
+- Filter modified entries (including properties and replacements), added entries, or conflicts, and optionally group or collapse directories. Hidden selections remain selected and are explicitly counted. View settings are retained per copy during the session.
+- Commit messages are saved atomically on the local machine per root and repository URL, and restored when reopening a copy after restart. Successful commits or confirmed removal of recent entries clear their drafts. Old file selections are not restored across restarts. Save failures are visible and can be retried.
+- Manual update checks from the app menu or Settings → General display the latest published release, publication date, and notes, with a link to the project's release page. Failed requests never report the app as up to date. Downloads and installation remain manual.
+
+Requires macOS 14+ and Subversion 1.14+. Universal Apple Silicon / Intel package with Simplified Chinese and English support.
+Ad-hoc signed, without Developer ID signing or Apple notarization. Validated on the local Apple Silicon machine; cross-device and Intel hardware validation remain pending.

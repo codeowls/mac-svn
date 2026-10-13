@@ -30,13 +30,15 @@ Real screenshots of the app using a local demo repository and the author `demo`.
 
 ## 简体中文
 
-当前版本为 **1.5.0**，面向日常 SVN 工作副本管理。源码采用 MIT 协议；应用尚未完成正式签名、公证和跨设备兼容性验证。
+当前版本为 **1.6.0**，面向日常 SVN 工作副本管理。源码采用 MIT 协议；应用尚未完成正式签名、公证和跨设备兼容性验证。
+
+1.6.0 新增本地自动刷新、连续审阅与内容变更后失效的审阅标记、词级高亮和差异搜索、更新前远端变化预览、状态筛选与目录分组、跨重启提交说明恢复，以及手动检查新版本。详见[本版发布说明](release-notes/1.6.0.txt)。
 
 ## 下载与安装
 
-前往 [GitHub Releases](https://github.com/codeowls/mac-svn/releases/latest) 下载，或直接选择 **1.5.0** 安装包：
+前往 [GitHub Releases](https://github.com/codeowls/mac-svn/releases/latest) 下载，或直接选择 **1.6.0** 安装包：
 
-- [DMG 安装包（推荐）](https://github.com/codeowls/mac-svn/releases/download/v1.5.0/Mac-SVN-1.5.0-universal.dmg)：打开后将 **Mac SVN.app** 拖入 **Applications（应用程序）**。
+- [DMG 安装包（推荐）](https://github.com/codeowls/mac-svn/releases/download/v1.6.0/Mac-SVN-1.6.0-universal.dmg)：打开后将 **Mac SVN.app** 拖入 **Applications（应用程序）**。
 
 安装包要求 **macOS 14+**，同时包含 **Apple Silicon / Intel** 架构，无需安装 Swift 或 Xcode。已在 Apple Silicon 验收；Intel 已完成构建，尚未进行 Intel 实机验收。App 仍需本机 **Subversion 1.14+**；已安装 Homebrew 时运行 `brew install subversion`，启动后可在设置中检测或指定 SVN 路径。应用支持简体中文和英文，可在设置中切换，重启后生效。
 
@@ -66,7 +68,7 @@ open "dist/Mac SVN.app"
 
 构建脚本默认将 SwiftPM 并行任务数和编译器线程数均设为 2，以降低本机负载；这不是严格的 CPU 占用上限。可用 `SWIFT_BUILD_JOBS=1 bash scripts/build-app.sh` 进一步降低并发，或按需增加该正整数。通用包的两个架构依次构建，`package-release.sh` 也沿用此设置。正式安装包可由下述 GitHub Actions 发布流程构建，无需在本机重复打包。
 
-运行 `bash scripts/package-release.sh` 生成通用架构 DMG 和本地 SHA256 校验文件，输出到 `dist/releases/1.5.0/`；已有同版本输出时拒绝覆盖。维护者更新 `VERSION` 及 `release-notes/<版本>.txt` 后推送对应 `v<版本>` 标签，发布工作流会校验标签、构建验证安装包、上传附件后公开 Release。
+运行 `bash scripts/package-release.sh` 生成通用架构 DMG 和本地 SHA256 校验文件，输出到 `dist/releases/1.6.0/`；已有同版本输出时拒绝覆盖。维护者更新 `VERSION` 及 `release-notes/<版本>.txt` 后推送对应 `v<版本>` 标签，发布工作流会校验标签、构建验证安装包、上传附件后公开 Release。
 
 打包时自动生成并嵌入原生 App 图标；源图和图标说明位于 [`assets/`](assets/README.md)。通过打包后的 `.app` 启动可使用该图标。打包脚本会刷新该 App 的 Launch Services 注册，启动时重新载入 Dock 图标；重建后请退出旧进程再打开 `dist/Mac SVN.app`。`swift run` 是裸可执行文件调试入口，不包含 `.app` 的图标和语言声明。
 
@@ -198,13 +200,15 @@ scripts/build-app.sh  本地 .app 打包
 
 ## English
 
-**Version 1.5.0.** Mac SVN is a native SwiftUI client for everyday Subversion work. Source code is available under the MIT License. The app has not yet completed release signing, notarization, or cross-device compatibility validation.
+**Version 1.6.0.** Mac SVN is a native SwiftUI client for everyday Subversion work. Source code is available under the MIT License. The app has not yet completed release signing, notarization, or cross-device compatibility validation.
+
+Version 1.6.0 adds automatic local refresh, continuous review with marks that expire after content changes, word highlights and diff search, remote change previews, status filters and directory groups, commit message recovery across restarts, and manual update checks. See the [release notes](release-notes/1.6.0.txt).
 
 ### Download and install
 
-Visit [GitHub Releases](https://github.com/codeowls/mac-svn/releases/latest), or download **1.5.0** directly:
+Visit [GitHub Releases](https://github.com/codeowls/mac-svn/releases/latest), or download **1.6.0** directly:
 
-- [DMG installer (recommended)](https://github.com/codeowls/mac-svn/releases/download/v1.5.0/Mac-SVN-1.5.0-universal.dmg): open it and drag **Mac SVN.app** into **Applications**.
+- [DMG installer (recommended)](https://github.com/codeowls/mac-svn/releases/download/v1.6.0/Mac-SVN-1.6.0-universal.dmg): open it and drag **Mac SVN.app** into **Applications**.
 
 Requires **macOS 14+** and local **Subversion 1.14+**. Both **Apple Silicon and Intel** architectures are included; Swift/Xcode is not required. Apple Silicon runtime checks passed; Intel is built but has not been tested on physical Intel hardware. With Homebrew already installed, run `brew install subversion`; the SVN path can be selected in app Settings. The app supports Simplified Chinese and English; change the language in Settings and restart.
 
@@ -235,7 +239,7 @@ The script builds for the local architecture, embeds the app icon and language d
 
 Build scripts default to 2 SwiftPM jobs and 2 compiler threads to reduce local load; this is not a strict CPU usage cap. Use `SWIFT_BUILD_JOBS=1 bash scripts/build-app.sh` to reduce concurrency further, or choose another positive integer. Universal builds process architectures sequentially, and `package-release.sh` inherits the same setting. The GitHub Actions release workflow can build distribution packages without repeating that work locally.
 
-Use `bash scripts/build-app.sh --universal` for both architectures, or `bash scripts/package-release.sh` to produce DMG and local checksums in `dist/releases/1.5.0/`. Existing release output is not overwritten. The version comes from `VERSION`; packages use ad-hoc signing without Developer ID signing or Apple notarization. Running `swift run` starts a bare executable without the bundle's icon and language configuration.
+Use `bash scripts/build-app.sh --universal` for both architectures, or `bash scripts/package-release.sh` to produce DMG and local checksums in `dist/releases/1.6.0/`. Existing release output is not overwritten. The version comes from `VERSION`; packages use ad-hoc signing without Developer ID signing or Apple notarization. Running `swift run` starts a bare executable without the bundle's icon and language configuration.
 
 Liquid Glass appearance requires a macOS 26+ SDK and macOS 26+ at runtime; the minimum deployment target remains macOS 14. The build script records the actual linked SDK. CI uses Xcode 16.4 and checks the compatibility build, not Liquid Glass appearance.
 
