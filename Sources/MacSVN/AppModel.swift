@@ -77,10 +77,13 @@ private struct WorkingCopyDraft {
     var showIgnored = false
     var historyFilter = HistoryFilter()
     var historyPath = "."
+    var reviewedSnapshots: [String: String] = [:]
 }
 
 @MainActor
 final class AppModel: ObservableObject {
+    let reviewState = FileReviewState()
+    @Published var pendingReviewPaths: [String] = []
     weak var mainWindow: NSWindow?
     @Published var workingCopy: WorkingCopy?
     @Published var entries: [StatusEntry] = []
@@ -318,6 +321,9 @@ final class AppModel: ObservableObject {
         let draft = workingCopy.map(WorkingCopyDraftKey.init) == key
             ? currentDraft() : workingCopyDrafts[key] ?? WorkingCopyDraft()
         let entries = try await client.status(at: copy.root, includeIgnored: draft.showIgnored)
+        let restoredReview = FileReviewState()
+        restoredReview.restore(draft.reviewedSnapshots)
+        let reviewedSnapshots = try await restoredReview.validate(using: client, at: copy.root)
         try Task.checkCancellation()
         // 成功读取目标后才保存并切换，打开失败或取消不会丢失当前副本的编辑内容。
         if let previous = workingCopy {
@@ -335,6 +341,7 @@ final class AppModel: ObservableObject {
         historyFilter = draft.historyFilter
         historyPath = draft.historyPath
         message = draft.message
+        reviewState.restore(reviewedSnapshots)
         showHistory = false
         commitPlan = nil
         fileOperationDraft = nil
@@ -360,7 +367,8 @@ final class AppModel: ObservableObject {
     private func currentDraft() -> WorkingCopyDraft {
         WorkingCopyDraft(
             message: message, fileFilter: fileFilter, selectedPaths: selectedPaths,
-            showIgnored: showIgnored, historyFilter: historyFilter, historyPath: historyPath
+            showIgnored: showIgnored, historyFilter: historyFilter, historyPath: historyPath,
+            reviewedSnapshots: reviewState.snapshots
         )
     }
 
@@ -395,13 +403,22 @@ final class AppModel: ObservableObject {
         let newEntries = try await client.status(at: root, includeIgnored: showIgnored)
         let newInfo = try await client.workingCopy(at: root)
         var newDiff: String?
+        var newReview: FileReview?
         if let path {
-            if let message = unavailableDiff(path: path, entry: newEntries.first { $0.path == path }) {
+            let entry = newEntries.first { $0.path == path }
+            if (entry != nil || !reviewState.queue.contains(path)),
+               let message = unavailableDiff(path: path, entry: entry) {
                 newDiff = message
             } else {
-                newDiff = try await client.diff(path: path, at: root)
+                if entry?.canCommit == true || reviewState.queue.contains(path) {
+                    newReview = try await client.fileReview(path: path, at: root)
+                    newDiff = newReview?.diff
+                } else {
+                    newDiff = try await client.diff(path: path, at: root)
+                }
             }
         }
+        let validated = try await reviewState.validate(using: client, at: root)
         try Task.checkCancellation()
         guard workingCopy?.root == root else { return }
         if entries != newEntries { entries = newEntries }
@@ -413,7 +430,9 @@ final class AppModel: ObservableObject {
         if focusedPath == path, let newDiff {
             diffTask?.cancel()
             if diffText != newDiff { diffText = newDiff }
+            reviewState.display(newReview)
         }
+        reviewState.replaceValidated(validated)
         automaticRefreshError = automaticRefresh.observationError?.localizedDescription
     }
 
@@ -1052,20 +1071,34 @@ final class AppModel: ObservableObject {
     /// Cancel the previous request and check identity so old diff results never overwrite new selections.
     func loadDiff() {
         diffTask?.cancel()
+        reviewState.display(nil)
         guard let path = focusedPath, let copy = workingCopy else {
             diffText = L10n.text("选择一个文件查看差异")
             return
         }
-        if let message = unavailableDiff(path: path, entry: entries.first { $0.path == path }) {
+        let entry = entries.first { $0.path == path }
+        if (entry != nil || !reviewState.queue.contains(path)),
+           let message = unavailableDiff(path: path, entry: entry) {
             diffText = message
             return
         }
         diffText = L10n.text("正在读取差异…")
         diffTask = Task {
             do {
-                let text = try await client().diff(path: path, at: copy.root)
+                let client = SVNClient(
+                    executable: try SVNConfiguration.executableURL(for: executablePath), globalIgnores: globalIgnores
+                )
+                let review = entry?.canCommit == true || reviewState.queue.contains(path)
+                    ? try await client.fileReview(path: path, at: copy.root) : nil
+                let text: String
+                if let review {
+                    text = review.diff
+                } else {
+                    text = try await client.diff(path: path, at: copy.root)
+                }
                 guard !Task.isCancelled, focusedPath == path, workingCopy?.root == copy.root else { return }
                 diffText = text
+                reviewState.display(review)
             } catch is CancellationError {
                 return
             } catch {
@@ -1130,6 +1163,8 @@ final class AppModel: ObservableObject {
 
     /// 清空副本相关状态，并阻止尚未完成的差异请求重新填充界面。
     private func closeWorkingCopy() {
+        reviewState.restore([:])
+        pendingReviewPaths = []
         automaticRefresh.stop()
         automaticRefreshError = nil
         diffTask?.cancel()
@@ -1187,6 +1222,7 @@ final class AppModel: ObservableObject {
         let newInfo = try await client.workingCopy(at: copy.root)
         entries = newEntries
         workingCopy = newInfo
+        reviewState.replaceValidated(try await reviewState.validate(using: client, at: copy.root))
         FinderBadgeService.shared.invalidate(copy.root.resolvingSymlinksInPath().path)
         selectedPaths.formIntersection(selectablePaths(in: entries))
         let filter = historyFilter
@@ -1195,6 +1231,43 @@ final class AppModel: ObservableObject {
         historyFilter = filter
         historyPath = path
         loadDiff()
+    }
+
+    /// 连续审阅只改变查看焦点，不添加或扩大提交选择。
+    func beginReview(paths: [String]? = nil) {
+        let candidates = paths ?? selectedEntries.filter(\.canCommit).map(\.path)
+        reviewState.begin(paths: candidates)
+        focusedPath = reviewState.queue.first
+    }
+
+    func moveReview(by offset: Int) {
+        guard let path = focusedPath, let index = reviewState.queue.firstIndex(of: path) else { return }
+        let next = index + offset
+        guard reviewState.queue.indices.contains(next) else { return }
+        focusedPath = reviewState.queue[next]
+    }
+
+    func markFocusedReview() async {
+        guard let copy = workingCopy, let review = reviewState.displayed, focusedPath == review.path else { return }
+        do {
+            let client = SVNClient(
+                executable: try SVNConfiguration.executableURL(for: executablePath), globalIgnores: globalIgnores
+            )
+            let snapshot = try await client.reviewSnapshot(path: review.path, at: copy.root)
+            try Task.checkCancellation()
+            guard workingCopy?.root == copy.root, focusedPath == review.path else { return }
+            try reviewState.mark(review, matching: snapshot)
+        } catch is CancellationError {
+            return
+        } catch {
+            guard workingCopy?.root == copy.root, focusedPath == review.path else { return }
+            reviewState.error = error.localizedDescription
+        }
+    }
+
+    func reviewedPaths(for plan: CommitPlan) -> Set<String> {
+        guard workingCopy?.root == plan.root else { return [] }
+        return Set(plan.items.filter { reviewState.snapshots[$0.path] == $0.snapshot }.map(\.path))
     }
 
     /// One foreground operation at a time; an interrupted write is followed by a fresh status read.

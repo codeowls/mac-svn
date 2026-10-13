@@ -24,7 +24,7 @@ public struct CommitReviewItem: Identifiable, Sendable, Equatable {
     public let reason: String
     public let change: CommitChange
     public let isDirectory: Bool
-    let snapshot: String
+    public let snapshot: String
 }
 
 public struct CommitPlan: Identifiable, Sendable {

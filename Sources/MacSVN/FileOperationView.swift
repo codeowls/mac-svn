@@ -95,18 +95,29 @@ struct FileOperationView: View {
 
 struct CommitReviewView: View {
     @ObservedObject var model: AppModel
+    @ObservedObject private var reviewState: FileReviewState
     let plan: CommitPlan
+
+    init(model: AppModel, plan: CommitPlan) {
+        self.model = model
+        self.reviewState = model.reviewState
+        self.plan = plan
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             WorkspaceHeading(title: L10n.text("确认提交范围：%@ 项", plan.items.count), icon: "checklist")
             Text(model.workingCopy?.repositoryURL ?? "").font(.caption).textSelection(.enabled)
-            CommitReviewContent(plan: plan)
+            CommitReviewContent(plan: plan, reviewedPaths: model.reviewedPaths(for: plan))
             ScrollView {
                 Text(plan.message).frame(maxWidth: .infinity, alignment: .leading).textSelection(.enabled)
             }
             .frame(maxHeight: 64)
             HStack {
+                Button(L10n.text("返回审阅")) {
+                    model.pendingReviewPaths = plan.items.map(\.path)
+                    model.commitPlan = nil
+                }
                 Spacer()
                 Button(L10n.text("返回检查"), role: .cancel) { model.commitPlan = nil }.keyboardShortcut(.cancelAction)
                 Button(L10n.text("提交到仓库")) { model.commitSelected(plan) }.buttonStyle(.borderedProminent)

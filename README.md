@@ -92,6 +92,7 @@ open "dist/Mac SVN.app"
 - 设置中支持选择 SVN 可执行文件、自动检测常见安装位置及测试版本；保存前检查 SVN 1.14+，编辑草稿不会提前改变当前配置。
 - 切换工作副本时，在当前 App 会话内分别保留提交说明、路径筛选、已选项目、显示忽略项开关及历史查询范围／筛选；返回副本时重新核对状态，已提交或已忽略项目不会恢复为选中。提交成功清空对应草稿，移除最近记录会丢弃该副本草稿，退出 App 后草稿不保留。
 - 当前工作副本的文件变化会自动合并并刷新本地状态，返回应用时也会重新检查。自动刷新保留提交说明、有效勾选、筛选条件、历史页面及操作输出，只更新本地状态和当前差异；内容未变时不重建差异视图。前台操作期间暂停自动读取，结束后处理待刷新请求；失败显示提示，不自动更新或提交。
+- 连续审阅：勾选后点击“审阅选中项目”，在同一差异窗口切换上一／下一项目并主动标记已审阅。标记按实际内容、属性和状态快照核对，后续变化会使标记失效；各副本隔离且仅在当前会话保留。提交确认页显示实际范围内的审阅进度，包括必须一起提交的关联项目，可返回审阅；标记不改变选择，也不阻止提交。
 - 支持仅对本应用生效的全局忽略列表，保存后刷新当前副本并在重启后保留；可切回系统 SVN 配置。状态列表支持显示已忽略项，忽略项不能勾选添加或提交。
 - 打开已有工作副本，保存最近打开记录；已有记录切换时保持原位，新副本加入顶部；右键记录并选择“删除…”后，弹窗显示完整路径；确认“移除记录”才从列表移除，取消不改变记录。移除结果在重启后仍生效，不删除磁盘文件。移除当前副本或清空列表时，清空工作区并返回欢迎页；移除其他记录不影响当前工作区。从子目录打开时定位到工作副本根目录。
 - 直接输入远端分支 URL 检出，或逐层浏览仓库目录、进入所需分支后检出到新目录；支持标准及自定义分支布局。
@@ -261,6 +262,7 @@ Version 1.5.0 adds local status badges and directory aggregation while Mac SVN i
 - Inspect the destination after a failed or cancelled checkout while preserving command output. Recovery distinguishes empty directories, non-working-copy contents, and recognizable working copies; it reports incomplete paths, conflicts, and working-copy locks. Recheck, reveal, or open the directory explicitly; no automatic cleanup, deletion, or retry is performed. A readable working copy does not prove checkout completion.
 - Preserve commit messages, selections, filters, and history scope separately for each working copy during the current session. Selections are revalidated when returning to a working copy. Drafts are not persisted across app restarts.
 - Local file changes in the current working copy are coalesced into automatic status refreshes, with another check when returning to the app. Refreshes preserve commit drafts, valid selections, filters, history, and operation output, updating only local status and the current diff. Unchanged diff content does not rebuild the viewer. Foreground operations pause automatic reads and resume pending requests afterward. Failures are shown explicitly; no update or commit runs automatically.
+- Review selected items consecutively in one diff window and explicitly mark them reviewed. Marks match content, property, and state snapshots, expire after changes, and remain isolated to each working copy in the current session. Commit confirmation shows review progress for the actual scope, including required related items, and can return to review. Marks neither change selections nor block commits.
 - Configure the SVN executable, app-specific global ignore patterns, and directory-level `svn:ignore` properties.
 
 ### Typical workflow

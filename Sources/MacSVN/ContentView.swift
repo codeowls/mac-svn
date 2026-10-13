@@ -4,6 +4,7 @@ import SVNCore
 
 struct ContentView: View {
     @ObservedObject var model: AppModel
+    @ObservedObject private var reviewState: FileReviewState
     @ViewState private var showCheckout = false
     @ViewState private var showLogin = false
     @ViewState private var showDiff = false
@@ -17,6 +18,11 @@ struct ContentView: View {
     @ViewState private var commitExpanded = false
 
     private let statusRowHeight: CGFloat = 44
+
+    init(model: AppModel) {
+        self.model = model
+        self.reviewState = model.reviewState
+    }
 
     private var visibleEntries: [StatusEntry] {
         model.entries.filter { model.fileFilter.isEmpty || $0.path.localizedCaseInsensitiveContains(model.fileFilter) }
@@ -87,7 +93,13 @@ struct ContentView: View {
             }
         }
         .sheet(isPresented: $showCheckout) { CheckoutView(model: model) }
-        .sheet(item: $model.commitPlan) { plan in
+        .sheet(item: $model.commitPlan, onDismiss: {
+            if !model.pendingReviewPaths.isEmpty {
+                model.beginReview(paths: model.pendingReviewPaths)
+                model.pendingReviewPaths = []
+                showDiff = true
+            }
+        }) { plan in
             CommitReviewView(model: model, plan: plan)
         }
         .sheet(item: $model.fileOperationDraft) { draft in
@@ -107,7 +119,10 @@ struct ContentView: View {
                 model.confirmRevert(plan)
             }
         }
-        .sheet(isPresented: $showDiff, onDismiss: { model.focusedPath = nil }) {
+        .sheet(isPresented: $showDiff, onDismiss: {
+            model.focusedPath = nil
+            reviewState.begin(paths: [])
+        }) {
             DiffView(model: model)
         }
         .sheet(isPresented: $showLogin) {
@@ -423,6 +438,8 @@ struct ContentView: View {
                                     if entry.isConflict {
                                         model.inspectConflict(path: entry.path)
                                     } else {
+                                        let selected = model.selectedEntries.filter(\.canCommit).map(\.path)
+                                        reviewState.begin(paths: selected.contains(entry.path) ? selected : [entry.path])
                                         model.focusedPath = entry.path
                                         showDiff = true
                                     }
@@ -438,6 +455,12 @@ struct ContentView: View {
                                             .multilineTextAlignment(.leading)
                                             .help(entry.path)
                                             .frame(maxWidth: .infinity, alignment: .leading)
+                                        if reviewState.snapshots[entry.path] != nil {
+                                            Image(systemName: "checkmark.circle.fill")
+                                                .foregroundStyle(.green)
+                                                .help(L10n.text("已审阅"))
+                                                .accessibilityLabel(L10n.text("已审阅"))
+                                        }
                                         WorkspaceBadge(title: entry.label, color: statusColor(entry))
                                             .fixedSize()
                                             .help(entry.item == "unversioned"
@@ -502,6 +525,11 @@ struct ContentView: View {
             HStack {
                 Text(L10n.text("已选 %@ 项", model.selectedPaths.count)).font(.caption)
                 Spacer()
+                Button(L10n.text("审阅选中项目")) {
+                    model.beginReview()
+                    showDiff = true
+                }
+                .disabled(model.isBusy || !model.selectedEntries.contains(where: \.canCommit))
                 Button(L10n.text("取消选择")) { model.selectedPaths = [] }
                     .disabled(model.isBusy || model.selectedPaths.isEmpty)
                 Menu(L10n.text("文件操作")) {

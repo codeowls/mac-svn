@@ -41,8 +41,13 @@ public struct SVNClient: Sendable {
         return try SVNXML.info(output.stdout)
     }
 
-    public func status(at directory: URL, includeIgnored: Bool = false) async throws -> [StatusEntry] {
+    public func status(
+        at directory: URL, includeIgnored: Bool = false, includeUnchanged: Bool = false
+    ) async throws -> [StatusEntry] {
         var arguments = ["status", "--xml", "--ignore-externals"]
+        if includeUnchanged {
+            arguments.append("--verbose")
+        }
         if includeIgnored {
             arguments.append("--no-ignore")
         }

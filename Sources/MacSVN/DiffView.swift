@@ -4,17 +4,67 @@ import SVNCore
 
 struct DiffView: View {
     @ObservedObject var model: AppModel
+    @ObservedObject private var reviewState: FileReviewState
+    @ViewState private var isMarking = false
+
+    init(model: AppModel) {
+        self.model = model
+        self.reviewState = model.reviewState
+    }
 
     var body: some View {
-        DiffContentView(
-            title: model.focusedPath ?? L10n.text("文件差异"),
-            subtitle: model.entries.first { $0.path == model.focusedPath }?.label ?? L10n.text("文件差异"),
-            text: model.diffText,
-            oldLabel: L10n.text("原版本 · BASE"),
-            newLabel: L10n.text("本地工作副本"),
-            footer: L10n.text("对比本地基准版本与当前内容 · 不会修改文件"),
-            fileURL: model.focusedPath.flatMap { model.workingCopy?.root.appendingPathComponent($0) }
-        )
+        VStack(spacing: 0) {
+            reviewBar
+            DiffContentView(
+                title: model.focusedPath ?? L10n.text("文件差异"),
+                subtitle: model.entries.first { $0.path == model.focusedPath }?.label ?? L10n.text("文件差异"),
+                text: model.diffText,
+                oldLabel: L10n.text("原版本 · BASE"),
+                newLabel: L10n.text("本地工作副本"),
+                footer: L10n.text("对比本地基准版本与当前内容 · 不会修改文件"),
+                fileURL: model.focusedPath.flatMap { model.workingCopy?.root.appendingPathComponent($0) }
+            )
+        }
+    }
+
+    private var reviewBar: some View {
+        let path = model.focusedPath ?? ""
+        let index = reviewState.queue.firstIndex(of: path)
+        let isReviewed = reviewState.displayed.map { reviewState.snapshots[path] == $0.snapshot } ?? false
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Button(L10n.text("上一项目")) { model.moveReview(by: -1) }
+                    .disabled(index == nil || index == 0)
+                    .keyboardShortcut(.leftArrow, modifiers: [.command, .option])
+                Button(L10n.text("下一项目")) { model.moveReview(by: 1) }
+                    .disabled(index == nil || index == reviewState.queue.count - 1)
+                    .keyboardShortcut(.rightArrow, modifiers: [.command, .option])
+                Text(L10n.text("已审阅 %@ / %@ 项", reviewState.queue.filter { reviewState.snapshots[$0] != nil }.count, reviewState.queue.count))
+                    .font(.caption)
+                Spacer()
+                if isReviewed {
+                    Label(L10n.text("已审阅"), systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+                    Button(L10n.text("取消审阅标记")) { reviewState.unmark(path) }
+                } else {
+                    Button(L10n.text("标记已审阅")) {
+                        isMarking = true
+                        Task { @MainActor in
+                            await model.markFocusedReview()
+                            isMarking = false
+                        }
+                    }
+                    .disabled(reviewState.displayed?.path != path || isMarking || model.isBusy)
+                }
+            }
+            if let error = reviewState.error {
+                HStack {
+                    Text(error).foregroundStyle(.red).font(.caption).textSelection(.enabled)
+                    Button(L10n.text("重新读取")) { model.loadDiff() }
+                }
+            }
+        }
+        .padding(12)
+        .background(.bar)
     }
 }
 
@@ -157,6 +207,7 @@ struct DiffContentView: View {
                 .background(WorkspaceStyle.accent.opacity(0.10), in: RoundedRectangle(cornerRadius: 10))
             VStack(alignment: .leading, spacing: 4) {
                 WorkspacePathLabel(path: title)
+                    .id(title)
                     .textSelection(.enabled)
                 Text(subtitle)
                     .font(.caption).foregroundStyle(.secondary)

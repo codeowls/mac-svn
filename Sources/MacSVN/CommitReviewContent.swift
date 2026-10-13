@@ -4,6 +4,7 @@ import SVNCore
 /// 主工作区与访达提交复用同一份辅助检查和实际范围，建议不改变提交选择。
 struct CommitReviewContent: View {
     let plan: CommitPlan
+    var reviewedPaths: Set<String>? = nil
     @ViewState private var showNearby = true
     @ViewState private var showTemporary = true
     @ViewState private var showScope = true
@@ -12,6 +13,14 @@ struct CommitReviewContent: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 14) {
                 summary
+                if let reviewedPaths {
+                    Label(
+                        L10n.text("实际提交范围已审阅 %@ / %@ 项", reviewedPaths.count, plan.items.count),
+                        systemImage: "checklist"
+                    )
+                    Text(L10n.text("审阅标记仅供参考；内容、属性或状态改变后需重新审阅，不会阻止提交。"))
+                        .font(.caption).foregroundStyle(.secondary)
+                }
                 if !plan.assistance.temporaryItems.isEmpty {
                     DisclosureGroup(
                         L10n.text("新增内容中的疑似临时文件：%@ 项", plan.assistance.temporaryItems.count),
@@ -44,6 +53,13 @@ struct CommitReviewContent: View {
                                     .textSelection(.enabled)
                                 Text("\(item.change.label) · \(item.reason)")
                                     .font(.caption).foregroundStyle(.secondary)
+                                if let reviewedPaths {
+                                    Label(
+                                        reviewedPaths.contains(item.path) ? L10n.text("已审阅") : L10n.text("未审阅"),
+                                        systemImage: reviewedPaths.contains(item.path) ? "checkmark.circle" : "circle"
+                                    )
+                                    .font(.caption)
+                                }
                             }
                         }
                     }
