@@ -46,6 +46,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 struct MacSVNApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @StateObject private var model = AppModel()
+    @Environment(\.openWindow) private var openWindow
     @AppStorage("workspaceAppearance") private var appearance = "system"
 
     init() {
@@ -72,6 +73,9 @@ struct MacSVNApp: App {
         }
         .defaultSize(width: 1250, height: 800)
         .commands {
+            CommandGroup(after: .appInfo) {
+                Button(L10n.text("检查新版本…")) { openWindow(id: ReleaseCheckView.windowID) }
+            }
             CommandGroup(replacing: .newItem) {
                 Button(L10n.text("打开工作副本…")) { model.chooseWorkingCopy() }
                     .keyboardShortcut("o")
@@ -102,6 +106,13 @@ struct MacSVNApp: App {
                 .preferredColorScheme(preferredColorScheme)
         }
         .defaultPosition(.center)
+        .windowResizability(.contentSize)
+
+        Window(L10n.text("检查新版本"), id: ReleaseCheckView.windowID) {
+            ReleaseCheckView()
+                .environment(\.locale, L10n.language.locale)
+                .preferredColorScheme(preferredColorScheme)
+        }
         .windowResizability(.contentSize)
 
         Settings {

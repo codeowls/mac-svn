@@ -4,6 +4,7 @@ import SVNCore
 
 struct SettingsView: View {
     @ObservedObject var model: AppModel
+    @Environment(\.openWindow) private var openWindow
     @ViewState private var tab = "general"
     @AppStorage(AppLanguage.preferenceKey) private var language = AppLanguage.chinese.rawValue
     @ViewState private var executablePath = ""
@@ -96,6 +97,8 @@ struct SettingsView: View {
                 Label(L10n.text("语言已保存，请退出并重新打开应用。"), systemImage: "info.circle")
                     .font(.callout)
             }
+            Divider()
+            Button(L10n.text("检查新版本…")) { openWindow(id: ReleaseCheckView.windowID) }
         }
     }
 

@@ -84,6 +84,8 @@ open "dist/Mac SVN.app"
 
 ## 当前功能
 
+- 在应用菜单或“设置 → 通用”手动检查新版本，查看项目 GitHub 最新正式版、发布时间和发布说明，再打开发布页面下载；请求失败明确报告，不自动下载安装。
+
 - 提交说明按本地根目录和仓库地址原子保存到本机应用数据目录，重启后打开副本即可恢复；成功提交或确认移除副本记录会清除对应草稿。重启不恢复旧选中范围。保存失败会提示重试，并在仍有未保存内容时阻止正常退出。
 
 - 本地列表支持全部、修改（含属性修改和替换）、新增、冲突筛选及可折叠目录分组。筛选或折叠保留已选范围，隐藏的已选项目会明确提示；视图设置按副本保留在当前会话。
@@ -246,6 +248,8 @@ Version 1.5.0 adds a first-launch setup guide. It explains extension activation,
 Version 1.5.0 adds local status badges and directory aggregation while Mac SVN is running: green for no local changes, orange for modifications, blue for additions, red for conflicts or abnormal states, and gray for unversioned items. Green does not indicate synchronization with the server. Ignored and unscanned paths remain unbadged, and other Finder extensions monitoring the same directory may affect badge display.
 
 ### Features
+
+- Manually check for updates from the app menu or Settings → General. View the latest published GitHub release, publication date, and notes, then open its download page. Request failures are shown explicitly; downloads and installation remain manual.
 
 - Commit messages are saved atomically in local application data per root and repository URL, and restored when reopening a copy after restart. A successful commit or confirmed removal of a recent copy clears its draft. File selections are not restored across restarts. Save failures remain visible and prevent normal quitting while messages are unsaved.
 
